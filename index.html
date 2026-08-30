@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-[#FAF6EE] text-black">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Audiocut - Smart Audio Splitter</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            neoYellow: '#FFE600',
+            neoOrange: '#FF5C00',
+            neoGreen: '#00FF66',
+            neoBlue: '#00E5FF',
+            neoPurple: '#A084E8',
+            neoCream: '#FAF6EE'
+          }
+        }
+      }
+    }
+  </script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- JSZip -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <style>
+    /* Neo-brutalist focus and scrollbar customization */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #FAF6EE;
+      border-left: 3px solid #000000;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #000000;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #FF5C00;
+    }
+    /* Simple scale on select/focus */
+    input:focus, select:focus {
+      outline: none;
+      border-color: #FF5C00 !important;
+      background-color: #FFFFFF !important;
+    }
+  </style>
+</head>
+<body class="flex flex-col min-h-full font-sans antialiased">
+  
+  <!-- Header / Navigation -->
+  <header class="border-b-4 border-black bg-neoYellow text-black sticky top-0 z-50 shadow-[0_4px_0_0_#000]">
+    <div class="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="bg-black text-neoYellow p-2.5 border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] rounded-none">
+          <i data-lucide="scissors" class="w-6 h-6 stroke-[3]"></i>
+        </div>
+        <div>
+          <h1 class="text-2xl font-black uppercase tracking-wider text-black">Audiocut</h1>
+          <p class="text-xs font-bold uppercase tracking-tight text-black/80">Slice audio into perfect chunks instantly</p>
+        </div>
+      </div>
+      <div class="flex items-center space-x-3">
+        <span id="envBadge" class="px-3 py-1 border-2 border-black bg-white text-black text-xs font-black uppercase tracking-wider shadow-[3px_3px_0px_0px_#000] flex items-center gap-1.5">
+          <span class="w-2.5 h-2.5 rounded-none border-2 border-black bg-slate-400" id="envBadgeDot"></span>
+          <span id="envBadgeText">Detecting...</span>
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Wrapper -->
+  <main class="flex-grow max-w-5xl w-full mx-auto px-4 py-10 flex flex-col md:flex-row gap-10">
+    
+    <!-- Left Column: Settings and Controls -->
+    <div class="flex-1 space-y-8">
+      
+      <!-- Card 1: Select Audio File -->
+      <section class="bg-white border-4 border-black p-6 shadow-[8px_8px_0px_0px_#000] rounded-none transition-all relative">
+        <!-- Accent corner tag -->
+        <div class="absolute -top-3.5 -left-3.5 bg-neoPurple text-black text-xs font-black uppercase tracking-widest border-2 border-black px-2 py-0.5 shadow-[2px_2px_0px_0px_#000]">
+          Step 01
+        </div>
+
+        <div class="flex items-center justify-between mb-6 mt-1">
+          <h2 class="text-xl font-black uppercase tracking-wider flex items-center gap-2">
+            <i data-lucide="music" class="w-5 h-5 stroke-[2.5]"></i>
+            Select Audio File
+          </h2>
+          <span id="fileStatusBadge" class="hidden px-3 py-1 text-xs font-black uppercase tracking-widest border-2 border-black text-black bg-neoGreen shadow-[2px_2px_0px_0px_#000]">Ready</span>
+        </div>
+        
+        <!-- Drag & Drop Zone -->
+        <div id="dropZone" class="border-4 border-dashed border-black bg-[#FFFDF9] rounded-none p-8 text-center cursor-pointer hover:bg-neoYellow/15 hover:border-solid transition-all relative group">
+          <input type="file" id="fileInput" class="hidden" accept="audio/*" />
+          <div class="space-y-4">
+            <div class="mx-auto w-14 h-14 bg-white border-3 border-black flex items-center justify-center text-black group-hover:bg-neoYellow shadow-[3px_3px_0px_0px_#000] transition-all">
+              <i data-lucide="upload-cloud" class="w-7 h-7 stroke-[2.5]"></i>
+            </div>
+            <div>
+              <p class="text-base font-black uppercase tracking-wide text-black">Drag & drop your audio file here</p>
+              <p class="text-xs font-bold text-slate-500 uppercase mt-1">Supports MP3, WAV, M4A, OGG, FLAC & more</p>
+            </div>
+            <button class="px-5 py-2 bg-white hover:bg-black hover:text-white text-black font-extrabold text-xs uppercase tracking-widest border-2 border-black shadow-[3px_3px_0px_0px_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0px_0px_#000] transition-all inline-block pointer-events-none">
+              Browse Files
+            </button>
+          </div>
+        </div>
+
+        <!-- File Info Display -->
+        <div id="fileInfoCard" class="hidden mt-4 p-5 bg-neoCream border-3 border-black shadow-[4px_4px_0px_0px_#000] space-y-4 animate-fade-in rounded-none">
+          <div class="flex items-start justify-between border-b-2 border-black pb-3">
+            <div class="truncate pr-4">
+              <p class="text-md font-black uppercase tracking-wider text-black truncate" id="infoFileName">-</p>
+              <p class="text-xs font-bold uppercase tracking-widest text-slate-500 mt-0.5" id="infoFileSize">-</p>
+            </div>
+            <button id="removeFileBtn" class="bg-[#FF6B6B] hover:bg-red-600 text-black p-2 border-2 border-black shadow-[2px_2px_0px_0px_#000] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[3px_3px_0px_0px_#000] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[1px_1px_0px_0px_#000] transition-all shrink-0">
+              <i data-lucide="trash-2" class="w-4 h-4 stroke-[2.5]"></i>
+            </button>
+          </div>
+          <div class="grid grid-cols-3 gap-3 text-center text-xs">
+            <div class="p-3 bg-white border-2 border-black shadow-[2px_2px_0px_0px_#000]">
+              <p class="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Duration</p>
+              <p class="font-extrabold text-black" id="infoDuration">-</p>
+            </div>
+            <div class="p-3 bg-white border-2 border-black shadow-[2px_2px_0px_0px_#000]">
+              <p class="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Sample Rate</p>
+              <p class="font-extrabold text-black" id="infoSampleRate">-</p>
+            </div>
+            <div class="p-3 bg-white border-2 border-black shadow-[2px_2px_0px_0px_#000]">
+              <p class="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Channels</p>
+              <p class="font-extrabold text-black" id="infoChannels">-</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Card 2: Split Duration -->
+      <section class="bg-white border-4 border-black p-6 shadow-[8px_8px_0px_0px_#000] rounded-none relative">
+        <div class="absolute -top-3.5 -left-3.5 bg-neoBlue text-black text-xs font-black uppercase tracking-widest border-2 border-black px-2 py-0.5 shadow-[2px_2px_0px_0px_#000]">
+          Step 02
+        </div>
+
+        <h2 class="text-xl font-black uppercase tracking-wider flex items-center gap-2 mb-6 mt-1">
+          <i data-lucide="clock" class="w-5 h-5 stroke-[2.5]"></i>
+          Split Duration Settings
+        </h2>
+        
+        <div class="space-y-5">
+          <div>
+            <label class="block text-xs font-black uppercase tracking-wider mb-2 text-slate-500">Split Every...</label>
+            <div class="flex space-x-4">
+              <div class="relative flex-grow">
+                <input type="number" id="durationValue" value="1" min="1" class="w-full bg-white border-3 border-black px-4 py-3 text-black font-black text-lg shadow-[3px_3px_0px_0px_#000] focus:shadow-[4px_4px_0px_0px_#000] transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+              </div>
+              <div class="relative w-40">
+                <select id="durationUnit" class="w-full bg-white border-3 border-black px-4 py-3.5 text-black font-black text-sm uppercase tracking-wider shadow-[3px_3px_0px_0px_#000] focus:shadow-[4px_4px_0px_0px_#000] transition-all cursor-pointer appearance-none">
+                  <option value="60">Minutes</option>
+                  <option value="1">Seconds</option>
+                </select>
+                <div class="absolute inset-y-0 right-3 flex items-center pointer-events-none text-black">
+                  <i data-lucide="chevron-down" class="w-5 h-5 stroke-[3]"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Live Preview Slices Text -->
+          <div id="splitPreview" class="p-4 bg-neoCream border-2 border-black shadow-[3px_3px_0px_0px_#000] text-xs font-bold uppercase tracking-wider text-black leading-relaxed">
+            <span class="text-slate-500">Select an audio file and duration to see split preview.</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Card 3: Output Destination -->
+      <section class="bg-white border-4 border-black p-6 shadow-[8px_8px_0px_0px_#000] rounded-none relative">
+        <div class="absolute -top-3.5 -left-3.5 bg-neoOrange text-black text-xs font-black uppercase tracking-widest border-2 border-black px-2 py-0.5 shadow-[2px_2px_0px_0px_#000]">
+          Step 03
+        </div>
+
+        <h2 class="text-xl font-black uppercase tracking-wider flex items-center gap-2 mb-6 mt-1">
+          <i data-lucide="folder-output" class="w-5 h-5 stroke-[2.5]"></i>
+          Save Output To
+        </h2>
+
+        <div class="space-y-4">
+          <div class="flex items-stretch gap-4 flex-col sm:flex-row">
+            <button id="chooseFolderBtn" class="flex items-center justify-center gap-2 px-5 py-3 bg-white hover:bg-black hover:text-white text-black text-xs font-black uppercase tracking-widest border-3 border-black shadow-[4px_4px_0px_0px_#000] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[5px_5px_0px_0px_#000] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[2px_2px_0px_0px_#000] transition-all shrink-0">
+              <i data-lucide="folder" class="w-4 h-4 stroke-[3]"></i>
+              Choose Folder
+            </button>
+            <div class="flex-grow flex items-center min-w-0 py-3 px-4 bg-neoCream border-3 border-black text-xs font-bold font-mono text-black uppercase tracking-wide shadow-[3px_3px_0px_0px_#000] truncate" id="outputPathDisplay">
+              No folder selected (Downloads fallback)
+            </div>
+          </div>
+          
+          <div id="folderAccessNotice" class="text-xs font-bold uppercase tracking-wide text-slate-500 flex items-start gap-2">
+            <i data-lucide="info" class="w-4 h-4 text-black shrink-0 mt-0.5 stroke-[2.5]"></i>
+            <span id="folderAccessNoticeText">Your files will be compiled and downloaded as a ZIP archive when cutting is complete.</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Action Button / Progress -->
+      <div class="space-y-6">
+        <!-- Big Cut Button -->
+        <button id="cutBtn" disabled class="w-full py-5 bg-slate-300 text-slate-500 border-4 border-black font-black uppercase tracking-widest text-lg shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center justify-center gap-3 cursor-not-allowed">
+          <i data-lucide="scissors" class="w-6 h-6 stroke-[3]"></i>
+          Cut Audio
+        </button>
+
+        <!-- Progress Widget -->
+        <div id="progressWidget" class="hidden bg-white border-4 border-black p-6 shadow-[8px_8px_0px_0px_#000] space-y-4 animate-fade-in rounded-none">
+          <div class="flex items-center justify-between border-b-2 border-black pb-2">
+            <div class="flex items-center gap-2">
+              <span class="w-3.5 h-3.5 border-2 border-black bg-neoOrange animate-pulse inline-block"></span>
+              <span class="text-sm font-black uppercase tracking-wider text-black" id="progressStatus">Processing audio...</span>
+            </div>
+            <span class="text-sm font-black font-mono text-black" id="progressPercent">0%</span>
+          </div>
+          <!-- Brutalist Progress Bar -->
+          <div class="w-full bg-white border-3 border-black h-6 overflow-hidden p-0.5 shadow-[2px_2px_0px_0px_#000]">
+            <div id="progressBar" class="bg-neoOrange border-r-2 border-black h-full w-0 transition-all duration-300"></div>
+          </div>
+          <div class="flex justify-between items-center text-xs font-bold uppercase tracking-wider text-slate-500">
+            <span id="progressDetailed" class="truncate max-w-[280px] md:max-w-[340px]">Starting slice generator...</span>
+            <button id="cancelBtn" class="bg-[#FF6B6B] hover:bg-black hover:text-white text-black font-black text-[10px] uppercase tracking-widest px-2.5 py-1.5 border-2 border-black shadow-[2px_2px_0px_0px_#000] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[3px_3px_0px_0px_#000] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[1px_1px_0px_0px_#000] transition-all">
+               Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Right Column: Slices Output List -->
+    <div class="w-full md:w-80 flex flex-col shrink-0">
+      <div class="bg-white border-4 border-black p-6 shadow-[8px_8px_0px_0px_#000] rounded-none flex-grow flex flex-col min-h-[350px] md:min-h-0 relative">
+        <div class="absolute -top-3.5 -right-3.5 bg-neoGreen text-black text-xs font-black uppercase tracking-widest border-2 border-black px-2 py-0.5 shadow-[2px_2px_0px_0px_#000]">
+          Slices
+        </div>
+
+        <div class="flex items-center justify-between pb-4 border-b-3 border-black mb-6 mt-1 shrink-0">
+          <h2 class="text-md font-black uppercase tracking-wider flex items-center gap-2">
+            <i data-lucide="folder-open" class="w-5 h-5 stroke-[2.5]"></i>
+            Generated Slices
+          </h2>
+          <span id="slicesCountBadge" class="px-3 py-1 text-xs font-black font-mono border-2 border-black text-black bg-neoYellow shadow-[2px_2px_0px_0px_#000]">0</span>
+        </div>
+
+        <!-- Empty State -->
+        <div id="slicesEmptyState" class="flex-grow flex flex-col items-center justify-center text-center p-6 space-y-4">
+          <div class="w-14 h-14 bg-neoCream border-3 border-black flex items-center justify-center shadow-[3px_3px_0px_0px_#000]">
+            <i data-lucide="list-music" class="w-7 h-7 text-black stroke-[2.5]"></i>
+          </div>
+          <p class="text-xs font-bold uppercase tracking-wider text-slate-500 max-w-[200px] leading-relaxed">Slices will appear here after cutting is finished.</p>
+        </div>
+
+        <!-- Slices List (Custom Scrollbars apply) -->
+        <div id="slicesList" class="hidden flex-grow overflow-y-auto space-y-4 max-h-[440px] pr-2">
+          <!-- Populated by app.js -->
+        </div>
+
+        <!-- Download All / Open Folder Container (Only visible when completed) -->
+        <div id="slicesFooter" class="hidden pt-5 border-t-3 border-black mt-6 shrink-0 space-y-3">
+          <button id="downloadAllBtn" class="w-full py-3 bg-neoYellow hover:bg-black hover:text-white text-black text-xs font-black uppercase tracking-widest border-3 border-black shadow-[4px_4px_0px_0px_#000] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[5px_5px_0px_0px_#000] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[2px_2px_0px_0px_#000] transition-all flex items-center justify-center gap-2">
+            <i data-lucide="download" class="w-4 h-4 stroke-[3]"></i>
+            Download ZIP Archive
+          </button>
+          <button id="openFolderBtn" class="hidden w-full py-3 bg-white hover:bg-black hover:text-white text-black text-xs font-black uppercase tracking-widest border-3 border-black shadow-[4px_4px_0px_0px_#000] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[5px_5px_0px_0px_#000] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[2px_2px_0px_0px_#000] transition-all flex items-center justify-center gap-2">
+            <i data-lucide="external-link" class="w-4 h-4 stroke-[3]"></i>
+            Open Folder
+          </button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t-4 border-black bg-white py-6 mt-auto">
+    <div class="max-w-5xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between text-xs font-bold uppercase tracking-wide text-black gap-4">
+      <p>&copy; 2026 Audiocut. Running entirely client-side. Your files never leave your computer.</p>
+      <div class="flex items-center space-x-4">
+        <a href="https://github.com" target="_blank" class="hover:text-neoOrange flex items-center gap-1.5 transition-colors">
+          <i data-lucide="github" class="w-4 h-4 stroke-[2.5]"></i>
+          GitHub Source
+        </a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Include Core App Logic -->
+  <script src="app.js"></script>
+  <script>
+    // Initialize Lucide Icons
+    lucide.createIcons();
+  </script>
+</body>
+</html>
