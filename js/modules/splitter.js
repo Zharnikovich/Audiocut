@@ -1,12 +1,15 @@
 // Audiocut - Feature 1: Interval Splitter Module
 import { ENV } from '../constants.js';
-import { formatBytes, formatTime, sleep, blobToBase64, getAudioExtensionMatch } from '../utils/formatters.js';
+import { formatBytes, formatTime, sleep, blobToBase64, getAudioExtensionMatch, escapeHtml } from '../utils/formatters.js';
 import { bufferToWav } from '../utils/wav-encoder.js';
+import { decodeAudioFile } from '../utils/audio-decode.js';
+import { computeSplitSegments, MIN_SPLIT_SECONDS, MAX_SPLIT_SLICES } from '../utils/audio-buffer.js';
 import { 
   getCurrentEnv, 
   getSelectedFolderHandle, 
   getDesktopOutputPath, 
   chooseOutputFolder,
+  saveOrDownloadFile,
   triggerDownload 
 } from '../services/storage.js';
 import { registerAudioStopper } from '../components/navigation.js';
@@ -16,7 +19,7 @@ let audioBuffer = null;
 let isProcessing = false;
 let shouldCancel = false;
 let generatedSlices = [];
-let currentAudioContext = null;
+let decodeToken = 0; // Ignores stale decodes when a newer file is picked
 
 export function initSplitter() {
   const dropZone = document.getElementById('dropZone');
@@ -110,16 +113,6 @@ export function initSplitter() {
   }
 }
 
-// Window scope fallback for inline button triggers in slice cards
-window.triggerDownloadBlobUrl = function(url, filename) {
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-};
-
 async function handleFileSelection(file) {
   if (isProcessing) return;
   
@@ -129,6 +122,8 @@ async function handleFileSelection(file) {
   }
   
   audioFile = file;
+  audioBuffer = null;
+  const token = ++decodeToken;
   
   const dropZone = document.getElementById('dropZone');
   const fileInfoCard = document.getElementById('fileInfoCard');
@@ -138,7 +133,6 @@ async function handleFileSelection(file) {
   const infoDuration = document.getElementById('infoDuration');
   const infoSampleRate = document.getElementById('infoSampleRate');
   const infoChannels = document.getElementById('infoChannels');
-  const cutBtn = document.getElementById('cutBtn');
 
   dropZone.classList.add('hidden');
   fileInfoCard.classList.remove('hidden');
@@ -152,52 +146,41 @@ async function handleFileSelection(file) {
   infoSampleRate.textContent = '-';
   infoChannels.textContent = '-';
   
-  cutBtn.disabled = true;
-  cutBtn.className = 'w-full py-5 bg-slate-300 text-slate-500 border-4 border-black font-black uppercase tracking-widest text-lg shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center justify-center gap-3 cursor-not-allowed';
+  disableCutButton();
   
   try {
-    if (currentAudioContext) {
-      await currentAudioContext.close();
-    }
-    currentAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const decodedBuffer = await decodeAudioFile(file);
+    if (token !== decodeToken) return;
+    audioBuffer = decodedBuffer;
     
-    const fileReader = new FileReader();
-    fileReader.onload = async (e) => {
-      try {
-        const arrayBuffer = e.target.result;
-        currentAudioContext.decodeAudioData(arrayBuffer, (decodedBuffer) => {
-          audioBuffer = decodedBuffer;
-          
-          infoDuration.textContent = formatTime(audioBuffer.duration);
-          infoSampleRate.textContent = (audioBuffer.sampleRate / 1000).toFixed(1) + ' kHz';
-          infoChannels.textContent = audioBuffer.numberOfChannels === 1 ? 'Mono' : audioBuffer.numberOfChannels === 2 ? 'Stereo' : `${audioBuffer.numberOfChannels} Ch`;
-          
-          fileStatusBadge.textContent = 'Ready';
-          fileStatusBadge.className = 'px-3 py-1 text-xs font-black uppercase tracking-widest border-2 border-black text-black bg-neoGreen shadow-[2px_2px_0px_0px_#000]';
-          
-          updateSplitPreview();
-          enableCutButtonIfValid();
-        }, (error) => {
-          console.error('Decoding error:', error);
-          alert('Failed to decode audio. The file might be corrupted or codec unsupported.');
-          resetFileSelection();
-        });
-      } catch (err) {
-        console.error(err);
-        alert('An error occurred while loading the file.');
-        resetFileSelection();
-      }
-    };
-    fileReader.readAsArrayBuffer(file);
+    infoDuration.textContent = formatTime(audioBuffer.duration);
+    infoSampleRate.textContent = (audioBuffer.sampleRate / 1000).toFixed(1) + ' kHz';
+    infoChannels.textContent = audioBuffer.numberOfChannels === 1 ? 'Mono' : audioBuffer.numberOfChannels === 2 ? 'Stereo' : `${audioBuffer.numberOfChannels} Ch`;
     
-  } catch (err) {
-    console.error('AudioContext creation error:', err);
-    alert('Browser doesn\'t support Web Audio API!');
+    fileStatusBadge.textContent = 'Ready';
+    fileStatusBadge.className = 'px-3 py-1 text-xs font-black uppercase tracking-widest border-2 border-black text-black bg-neoGreen shadow-[2px_2px_0px_0px_#000]';
+    
+    updateSplitPreview();
+    enableCutButtonIfValid();
+  } catch (error) {
+    if (token !== decodeToken) return;
+    console.error('Decoding error:', error);
+    alert('Failed to decode audio. The file might be corrupted, use an unsupported codec, or be too large for browser memory.');
     resetFileSelection();
   }
 }
 
+// Stops slice previews and frees the object URLs of previously generated slices
+function releaseSlices() {
+  generatedSlices.forEach(slice => {
+    if (slice.audio) slice.audio.pause();
+    URL.revokeObjectURL(slice.url);
+  });
+  generatedSlices = [];
+}
+
 function resetFileSelection() {
+  decodeToken++;
   audioFile = null;
   audioBuffer = null;
   const dropZone = document.getElementById('dropZone');
@@ -232,33 +215,17 @@ function disableCutButton() {
   }
 }
 
+function getSplitSeconds() {
+  const val = parseFloat(document.getElementById('durationValue').value);
+  const unitFactor = parseFloat(document.getElementById('durationUnit').value);
+  return val * unitFactor;
+}
+
 function getSplitSegments() {
   if (!audioBuffer) return [];
-  const durationValueInput = document.getElementById('durationValue');
-  const durationUnitSelect = document.getElementById('durationUnit');
-  
-  const val = parseFloat(durationValueInput.value);
-  if (isNaN(val) || val <= 0) return [];
-  
-  const unitFactor = parseFloat(durationUnitSelect.value);
-  const splitDuration = val * unitFactor;
-  const totalDuration = audioBuffer.duration;
-  const segments = [];
-  
-  let currentStart = 0;
-  while (currentStart < totalDuration) {
-    let currentEnd = currentStart + splitDuration;
-    if (currentEnd > totalDuration) {
-      currentEnd = totalDuration;
-    }
-    segments.push({
-      start: currentStart,
-      end: currentEnd,
-      duration: currentEnd - currentStart
-    });
-    currentStart = currentEnd;
-  }
-  return segments;
+  const splitSeconds = getSplitSeconds();
+  if (audioBuffer.duration / splitSeconds > MAX_SPLIT_SLICES) return [];
+  return computeSplitSegments(audioBuffer.length, audioBuffer.sampleRate, splitSeconds);
 }
 
 function updateSplitPreview() {
@@ -270,11 +237,17 @@ function updateSplitPreview() {
     return;
   }
   
-  const segments = getSplitSegments();
-  if (segments.length === 0) {
-    splitPreview.innerHTML = '<span class="text-red-400 font-medium">Please enter a valid positive duration.</span>';
+  const splitSeconds = getSplitSeconds();
+  if (!(splitSeconds >= MIN_SPLIT_SECONDS)) {
+    splitPreview.innerHTML = `<span class="text-red-400 font-medium">Please enter a duration of at least ${MIN_SPLIT_SECONDS} seconds.</span>`;
     return;
   }
+  if (audioBuffer.duration / splitSeconds > MAX_SPLIT_SLICES) {
+    splitPreview.innerHTML = `<span class="text-red-400 font-medium">That would create more than ${MAX_SPLIT_SLICES} slices. Please choose a longer duration.</span>`;
+    return;
+  }
+
+  const segments = getSplitSegments();
   
   const firstDuration = segments[0].duration;
   const lastDuration = segments[segments.length - 1].duration;
@@ -297,7 +270,10 @@ async function startAudioSlicing() {
   if (!audioBuffer || isProcessing) return;
   
   const segments = getSplitSegments();
-  if (segments.length === 0) return;
+  if (segments.length === 0) {
+    updateSplitPreview();
+    return;
+  }
   
   const currentEnv = getCurrentEnv();
   let useZip = currentEnv === ENV.LEGACY;
@@ -322,7 +298,7 @@ async function startAudioSlicing() {
   
   isProcessing = true;
   shouldCancel = false;
-  generatedSlices = [];
+  releaseSlices();
   
   const slicesList = document.getElementById('slicesList');
   const slicesEmptyState = document.getElementById('slicesEmptyState');
@@ -353,7 +329,6 @@ async function startAudioSlicing() {
   updateProgress(0, 'Slicing...', 'Preparing audio workspace...');
   
   const fileBaseName = audioFile.name.substring(0, audioFile.name.lastIndexOf('.')) || audioFile.name;
-  const sampleRate = audioBuffer.sampleRate;
   
   await sleep(100);
   
@@ -377,9 +352,7 @@ async function startAudioSlicing() {
       
       await sleep(15);
       
-      const startSample = Math.floor(segment.start * sampleRate);
-      const sampleLength = Math.floor(segment.duration * sampleRate);
-      const wavBlob = bufferToWav(audioBuffer, startSample, sampleLength);
+      const wavBlob = bufferToWav(audioBuffer, segment.startSample, segment.length);
       const paddedIndex = String(sliceIndex).padStart(2, '0');
       const filename = `${fileBaseName}_part_${paddedIndex}.wav`;
       
@@ -449,6 +422,13 @@ async function startAudioSlicing() {
   }
 }
 
+function setSliceIcon(iconId, name) {
+  const icon = document.getElementById(iconId);
+  if (!icon) return;
+  icon.setAttribute('data-lucide', name);
+  if (window.lucide) window.lucide.createIcons();
+}
+
 function appendSliceToUI(slice, index) {
   const slicesEmptyState = document.getElementById('slicesEmptyState');
   const slicesList = document.getElementById('slicesList');
@@ -461,20 +441,21 @@ function appendSliceToUI(slice, index) {
   const item = document.createElement('div');
   item.className = 'p-4 bg-white border-3 border-black shadow-[4px_4px_0px_0px_#000] flex items-center justify-between space-x-3 text-xs transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[5px_5px_0px_0px_#000] rounded-none';
   
-  const playButtonId = `playBtn_${index}`;
+  // Lucide replaces icon elements on every createIcons() call, so icons are always looked up by id
   const iconId = `playIcon_${index}`;
+  const safeName = escapeHtml(slice.name);
   
   item.innerHTML = `
     <div class="flex items-center space-x-3 min-w-0 flex-1">
-      <button id="${playButtonId}" class="w-9 h-9 border-2 border-black bg-white hover:bg-neoYellow text-black flex items-center justify-center transition-all shrink-0 shadow-[2px_2px_0px_0px_#000] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[3px_3px_0px_0px_#000] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[1px_1px_0px_0px_#000] rounded-none">
+      <button class="slice-play-btn w-9 h-9 border-2 border-black bg-white hover:bg-neoYellow text-black flex items-center justify-center transition-all shrink-0 shadow-[2px_2px_0px_0px_#000] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[3px_3px_0px_0px_#000] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[1px_1px_0px_0px_#000] rounded-none">
         <i data-lucide="play" id="${iconId}" class="w-4 h-4 fill-current stroke-[2.5]"></i>
       </button>
       <div class="truncate leading-tight">
-        <p class="font-extrabold text-black truncate text-sm" title="${slice.name}">${slice.name}</p>
+        <p class="font-extrabold text-black truncate text-sm" title="${safeName}">${safeName}</p>
         <p class="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">${formatTime(slice.duration)} &bull; ${formatBytes(slice.size)}</p>
       </div>
     </div>
-    <button class="bg-white hover:bg-neoBlue text-black p-2 border-2 border-black shadow-[2px_2px_0px_0px_#000] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[3px_3px_0px_0px_#000] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[1px_1px_0px_0px_#000] transition-all shrink-0 rounded-none" onclick="triggerDownloadBlobUrl('${slice.url}', '${slice.name}')" title="Download slice">
+    <button class="slice-download-btn bg-white hover:bg-neoBlue text-black p-2 border-2 border-black shadow-[2px_2px_0px_0px_#000] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[3px_3px_0px_0px_#000] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[1px_1px_0px_0px_#000] transition-all shrink-0 rounded-none" title="Download slice">
       <i data-lucide="download" class="w-4 h-4 stroke-[2.5]"></i>
     </button>
   `;
@@ -484,39 +465,32 @@ function appendSliceToUI(slice, index) {
     window.lucide.createIcons({ attrs: { class: 'w-3.5 h-3.5' } });
   }
   
-  let audio = null;
-  const playBtn = item.querySelector(`#${playButtonId}`);
-  const playIcon = item.querySelector(`#${iconId}`);
-  
-  playBtn.addEventListener('click', () => {
-    document.querySelectorAll('[id^="playIcon_"]').forEach(icon => {
-      if (icon.id !== iconId) {
-        icon.setAttribute('data-lucide', 'play');
-      }
+  item.querySelector('.slice-download-btn').addEventListener('click', () => {
+    saveOrDownloadFile(slice.blob, slice.name).catch(err => {
+      alert('Save failed: ' + err.message);
     });
-    if (window.lucide) window.lucide.createIcons();
-    
-    if (audio && !audio.paused) {
-      audio.pause();
-    } else {
-      if (!audio) {
-        audio = new Audio(slice.url);
-        audio.addEventListener('ended', () => {
-          playIcon.setAttribute('data-lucide', 'play');
-          if (window.lucide) window.lucide.createIcons();
-        });
-      }
-      
-      if (window.currentlyPlayingAudio && window.currentlyPlayingAudio !== audio) {
-        window.currentlyPlayingAudio.pause();
-      }
-      
-      audio.play();
-      window.currentlyPlayingAudio = audio;
-      
-      playIcon.setAttribute('data-lucide', 'pause');
-      if (window.lucide) window.lucide.createIcons();
+  });
+
+  item.querySelector('.slice-play-btn').addEventListener('click', () => {
+    if (slice.audio && !slice.audio.paused) {
+      slice.audio.pause();
+      return;
     }
+
+    if (!slice.audio) {
+      slice.audio = new Audio(slice.url);
+      // Keep the icon in sync however playback stops (pause button, another slice, tab switch, end)
+      slice.audio.addEventListener('play', () => setSliceIcon(iconId, 'pause'));
+      slice.audio.addEventListener('pause', () => setSliceIcon(iconId, 'play'));
+      slice.audio.addEventListener('ended', () => setSliceIcon(iconId, 'play'));
+    }
+    
+    if (window.currentlyPlayingAudio && window.currentlyPlayingAudio !== slice.audio) {
+      window.currentlyPlayingAudio.pause();
+    }
+    
+    slice.audio.play();
+    window.currentlyPlayingAudio = slice.audio;
   });
 }
 
@@ -531,11 +505,14 @@ function updateProgress(percent, title, detail = '', isError = false) {
   if (progressStatus) progressStatus.textContent = title;
   if (progressDetailed) progressDetailed.textContent = detail;
   
+  if (progressBar) {
+    progressBar.classList.remove('bg-[#FF6B6B]', 'bg-neoGreen', 'bg-neoOrange');
+  }
+
   if (isError && progressBar) {
     progressBar.classList.add('bg-[#FF6B6B]');
     progressStatus.className = 'text-sm font-black uppercase tracking-wider text-[#FF6B6B]';
   } else if (percent === 100 && progressBar) {
-    progressBar.classList.remove('bg-neoOrange');
     progressBar.classList.add('bg-neoGreen');
     progressStatus.className = 'text-sm font-black uppercase tracking-wider text-black';
   } else if (progressBar) {

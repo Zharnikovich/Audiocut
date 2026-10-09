@@ -114,7 +114,7 @@ if __name__ == '__main__':
     api = Api()
     
     window = webview.create_window(
-        title='Audiocut - Smart Audio Splitter',
+        title='Audiocut Studio',
         url=f'http://127.0.0.1:{port}',
         js_api=api,
         width=1024,

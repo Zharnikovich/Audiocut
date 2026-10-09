@@ -3,9 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Audiocut - Smart Audio Splitter</title>
+  <title>Audiocut Studio</title>
+  <!-- Third-party libraries are vendored (pinned) so the desktop app works offline -->
   <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="vendor/tailwindcss-3.4.17.js"></script>
   <script>
     tailwind.config = {
       theme: {
@@ -23,13 +24,13 @@
     }
   </script>
   <!-- Lucide Icons -->
-  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="vendor/lucide-1.54.0.min.js"></script>
   <!-- JSZip -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="vendor/jszip-3.10.1.min.js"></script>
   <!-- LameJS (Pure-JS MP3 Encoder) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js"></script>
+  <script src="vendor/lame-1.2.1.min.js"></script>
   <!-- MP4 Muxer (M4A / AAC Muxer) -->
-  <script src="https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.4/build/mp4-muxer.min.js"></script>
+  <script src="vendor/mp4-muxer-5.1.4.min.js"></script>
   <style>
     /* Neo-brutalist focus and scrollbar customization */
     ::-webkit-scrollbar {
@@ -252,7 +253,7 @@
             <label class="block text-xs font-black uppercase tracking-wider mb-2 text-slate-500">Split Every...</label>
             <div class="flex space-x-4">
               <div class="relative flex-grow">
-                <input type="number" id="durationValue" value="1" min="1" class="w-full bg-white border-3 border-black px-4 py-3 text-black font-black text-lg shadow-[3px_3px_0px_0px_#000] focus:shadow-[4px_4px_0px_0px_#000] transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                <input type="number" id="durationValue" value="1" min="0.1" step="any" class="w-full bg-white border-3 border-black px-4 py-3 text-black font-black text-lg shadow-[3px_3px_0px_0px_#000] focus:shadow-[4px_4px_0px_0px_#000] transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
               </div>
               <div class="relative w-40">
                 <select id="durationUnit" class="w-full bg-white border-3 border-black px-4 py-3.5 text-black font-black text-sm uppercase tracking-wider shadow-[3px_3px_0px_0px_#000] focus:shadow-[4px_4px_0px_0px_#000] transition-all cursor-pointer appearance-none">
@@ -717,6 +718,11 @@
                   <button class="effects-speed-preset px-2.5 py-1.5 bg-white hover:bg-black hover:text-white text-black text-[10px] font-black border-2 border-black shadow-[1px_1px_0px_0px_#000]" data-speed="1.25">1.25x</button>
                   <button class="effects-speed-preset px-2.5 py-1.5 bg-white hover:bg-black hover:text-white text-black text-[10px] font-black border-2 border-black shadow-[1px_1px_0px_0px_#000]" data-speed="1.5">1.5x</button>
                 </div>
+                <label class="flex items-center gap-2 text-[11px] font-black uppercase tracking-wider text-black cursor-pointer select-none">
+                  <input type="checkbox" id="effectsPreservePitch" checked class="w-4 h-4 accent-black border-2 border-black cursor-pointer" />
+                  Keep original pitch
+                  <span class="normal-case tracking-normal font-bold text-slate-500">(off = tape-style speed, pitch shifts)</span>
+                </label>
               </div>
             </div>
 
