@@ -1,21 +1,23 @@
 // Audiocut - Feature 5: Multi-Format Audio Converter Module
 import { ENV, CONVERTER_FORMATS } from '../constants.js';
-import { formatBytes, formatTime, getAudioExtensionMatch } from '../utils/formatters.js';
+import { formatBytes, formatTime, getAudioExtensionMatch, escapeHtml } from '../utils/formatters.js';
 import { bufferToWav } from '../utils/wav-encoder.js';
 import { bufferToAiff } from '../utils/aiff-encoder.js';
 import { bufferToMp3 } from '../utils/mp3-encoder.js';
 import { bufferToM4a } from '../utils/m4a-encoder.js';
 import { bufferToOgg } from '../utils/ogg-encoder.js';
+import { decodeAudioFile } from '../utils/audio-decode.js';
+import { resampleBuffer, encoderSampleRate } from '../utils/audio-buffer.js';
 import {
   getCurrentEnv,
   getDesktopOutputPath,
+  getSelectedFolderHandle,
   chooseOutputFolder,
   saveOrDownloadFile
 } from '../services/storage.js';
 import { registerAudioStopper } from '../components/navigation.js';
 
 let converterQueue = [];
-let converterAudioContext = null;
 let isConverting = false;
 let shouldCancel = false;
 
@@ -97,7 +99,7 @@ export function initConverter() {
 
   // Download all as ZIP
   if (convertDownloadZipBtn) {
-    convertDownloadZipBtn.addEventListener('click', downloadAllConvertedZip);
+    convertDownloadZipBtn.addEventListener('click', () => downloadAllConvertedZip());
   }
 
   updateFormatOptionsUI();
@@ -148,10 +150,6 @@ async function addFilesToQueue(files) {
     return;
   }
 
-  if (!converterAudioContext) {
-    converterAudioContext = new (window.AudioContext || window.webkitAudioContext)();
-  }
-
   for (const file of validFiles) {
     const origExt = file.name.split('.').pop().toLowerCase();
     const baseName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
@@ -163,7 +161,7 @@ async function addFilesToQueue(files) {
       origName: file.name,
       origExt: origExt,
       size: file.size,
-      buffer: null,
+      decodable: false, // Decoded audio is not kept in memory; it is decoded again at conversion time
       duration: 0,
       sampleRate: 0,
       channels: 0,
@@ -177,11 +175,10 @@ async function addFilesToQueue(files) {
     converterQueue.push(item);
     renderConverterQueue();
 
-    // Decode audio in background
+    // Decode once to validate the file and read its details
     try {
-      const arrayBuffer = await file.arrayBuffer();
-      const decodedBuffer = await converterAudioContext.decodeAudioData(arrayBuffer);
-      item.buffer = decodedBuffer;
+      const decodedBuffer = await decodeAudioFile(file);
+      item.decodable = true;
       item.duration = decodedBuffer.duration;
       item.sampleRate = decodedBuffer.sampleRate;
       item.channels = decodedBuffer.numberOfChannels;
@@ -189,7 +186,7 @@ async function addFilesToQueue(files) {
     } catch (err) {
       console.warn('Could not decode file for conversion:', file.name, err);
       item.status = 'error';
-      item.errorMsg = 'Could not decode audio data';
+      item.errorMsg = 'Could not decode audio data (unsupported codec, corrupted, or too large for browser memory)';
     }
 
     renderConverterQueue();
@@ -263,11 +260,12 @@ function renderConverterQueue() {
         <div class="flex items-center gap-2 min-w-0">
           <span class="w-5 h-5 bg-neoCream border border-black flex items-center justify-center font-mono font-black text-[10px] shrink-0">${index + 1}</span>
           <div class="truncate">
-            <p class="font-black uppercase tracking-wider text-black truncate">${item.origName}</p>
+            <p class="font-black uppercase tracking-wider text-black truncate" title="${escapeHtml(item.origName)}">${escapeHtml(item.origName)}</p>
             <p class="text-[10px] font-bold text-slate-500 uppercase mt-0.5">
               ${formatBytes(item.size)} &bull; ${item.duration ? formatTime(item.duration) : '--'} &bull; 
-              <span class="font-mono text-black font-black">${item.origExt.toUpperCase()} &rarr; ${outExt.toUpperCase()}</span>
+              <span class="font-mono text-black font-black">${escapeHtml(item.origExt.toUpperCase())} &rarr; ${outExt.toUpperCase()}</span>
             </p>
+            ${item.status === 'error' && item.errorMsg ? `<p class="text-[10px] font-bold text-[#B91C1C] mt-0.5 whitespace-normal">${escapeHtml(item.errorMsg)}</p>` : ''}
           </div>
         </div>
         <div class="flex items-center gap-2 shrink-0">
@@ -337,7 +335,7 @@ function updateQueueEstimatedTargets() {
 
 async function startBatchConversion() {
   if (isConverting) return;
-  const readyItems = converterQueue.filter(item => item.buffer !== null);
+  const readyItems = converterQueue.filter(item => item.decodable);
   if (readyItems.length === 0) {
     alert('No ready audio files to convert.');
     return;
@@ -367,6 +365,12 @@ async function startBatchConversion() {
 
   const totalFiles = readyItems.length;
   let directSaveSuccessCount = 0;
+  const convertedThisRun = [];
+
+  // Write each file straight to disk when a destination is available; otherwise the batch is
+  // delivered at the end as one download (a single file, or a ZIP) instead of one per file
+  const env = getCurrentEnv();
+  const canSaveDirect = env === ENV.DESKTOP || (env === ENV.MODERN && !!getSelectedFolderHandle());
 
   for (let i = 0; i < totalFiles; i++) {
     if (shouldCancel) {
@@ -382,8 +386,9 @@ async function startBatchConversion() {
     if (progressDetailed) progressDetailed.textContent = item.origName;
 
     try {
-      // 1. Remix channels and/or resample if requested
-      const processedBuffer = await prepareAudioBuffer(item.buffer, channelOption, sampleRateOption);
+      // 1. Decode, then remix channels and/or resample as requested and as the encoder requires
+      const decodedBuffer = await decodeAudioFile(item.file);
+      const processedBuffer = await prepareAudioBuffer(decodedBuffer, channelOption, sampleRateOption, targetFormat);
 
       // 2. Encode to target format
       const outExt = targetFormat.toLowerCase();
@@ -425,11 +430,14 @@ async function startBatchConversion() {
       item.convertedBlob = convertedBlob;
       item.status = 'done';
       item.progress = 1.0;
+      convertedThisRun.push(item);
 
-      // 3. Save or download
-      const saveResult = await saveOrDownloadFile(convertedBlob, outFilename, { silent: true });
-      if (saveResult && saveResult.direct) {
-        directSaveSuccessCount++;
+      // 3. Save directly when possible
+      if (canSaveDirect) {
+        const saveResult = await saveOrDownloadFile(convertedBlob, outFilename, { silent: true });
+        if (saveResult && saveResult.direct) {
+          directSaveSuccessCount++;
+        }
       }
     } catch (err) {
       console.error(`Error converting ${item.origName}:`, err);
@@ -441,6 +449,14 @@ async function startBatchConversion() {
   }
 
   isConverting = false;
+
+  if (!canSaveDirect && convertedThisRun.length === 1) {
+    const only = convertedThisRun[0];
+    await saveOrDownloadFile(only.convertedBlob, only.outFilename, { silent: true });
+  } else if (!canSaveDirect && convertedThisRun.length > 1) {
+    await downloadAllConvertedZip(convertedThisRun);
+  }
+
   if (progressBar) progressBar.style.width = '100%';
   if (progressPercent) progressPercent.textContent = '100%';
 
@@ -464,41 +480,26 @@ async function startBatchConversion() {
   renderConverterQueue();
 }
 
-async function prepareAudioBuffer(inputBuffer, channelOption, sampleRateOption) {
+async function prepareAudioBuffer(inputBuffer, channelOption, sampleRateOption, targetFormat) {
   let targetSampleRate = inputBuffer.sampleRate;
   if (sampleRateOption === '44100') targetSampleRate = 44100;
   if (sampleRateOption === '48000') targetSampleRate = 48000;
+  // MP3/AAC only support certain rates (e.g. no 96 kHz), so map to the nearest supported one
+  targetSampleRate = encoderSampleRate(targetFormat, targetSampleRate);
 
   let targetChannels = Math.min(inputBuffer.numberOfChannels, 2);
   if (channelOption === '1') targetChannels = 1;
   if (channelOption === '2') targetChannels = 2;
 
-  // If no change needed, return original
-  if (targetSampleRate === inputBuffer.sampleRate && targetChannels === inputBuffer.numberOfChannels) {
-    return inputBuffer;
-  }
-
-  const targetLength = Math.round(inputBuffer.duration * targetSampleRate);
-  const offlineCtx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(
-    targetChannels,
-    targetLength,
-    targetSampleRate
-  );
-
-  const src = offlineCtx.createBufferSource();
-  src.buffer = inputBuffer;
-  src.connect(offlineCtx.destination);
-  src.start(0);
-
-  return await offlineCtx.startRendering();
+  return await resampleBuffer(inputBuffer, targetChannels, targetSampleRate);
 }
 
-async function downloadAllConvertedZip() {
-  const doneItems = converterQueue.filter(item => item.status === 'done' && item.convertedBlob);
+async function downloadAllConvertedZip(items = null) {
+  const doneItems = items || converterQueue.filter(item => item.status === 'done' && item.convertedBlob);
   if (doneItems.length === 0) return;
 
   if (typeof window.JSZip === 'undefined') {
-    alert('JSZip library is required to bundle files.');
+    alert('The ZIP library failed to load. Use the Save button on each file instead.');
     return;
   }
 

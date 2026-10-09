@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Audiocut Tests</title>
+  <style>
+    body { font: 14px/1.5 ui-monospace, Menlo, monospace; margin: 24px; background: #FAF6EE; color: #000; }
+    .pass { color: #15803D; }
+    .fail { color: #B91C1C; }
+    #summary { font-weight: 900; margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+  <!-- Serve the project root over HTTP (python3 -m http.server 8000) and open /tests/ -->
+  <div id="summary">Running...</div>
+  <ul id="results"></ul>
+  <script type="module">
+    import { tests } from './utils.test.js';
+
+    const results = document.getElementById('results');
+    let failed = 0;
+    for (const test of tests) {
+      const li = document.createElement('li');
+      try {
+        await test.fn();
+        li.className = 'pass';
+        li.textContent = `PASS  ${test.name}`;
+      } catch (err) {
+        failed++;
+        li.className = 'fail';
+        li.textContent = `FAIL  ${test.name} — ${err.message}`;
+      }
+      results.appendChild(li);
+    }
+    document.getElementById('summary').textContent =
+      failed === 0 ? `All ${tests.length} tests passed` : `${failed} of ${tests.length} tests failed`;
+    document.getElementById('summary').className = failed === 0 ? 'pass' : 'fail';
+  </script>
+</body>
+</html>

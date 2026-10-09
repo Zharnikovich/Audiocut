@@ -6,6 +6,8 @@ import { bufferToAiff } from '../utils/aiff-encoder.js';
 import { bufferToMp3 } from '../utils/mp3-encoder.js';
 import { bufferToM4a } from '../utils/m4a-encoder.js';
 import { bufferToOgg } from '../utils/ogg-encoder.js';
+import { decodeAudioFile } from '../utils/audio-decode.js';
+import { sliceBuffer, resampleBuffer, encoderSampleRate } from '../utils/audio-buffer.js';
 import { saveOrDownloadFile } from '../services/storage.js';
 import { registerAudioStopper } from '../components/navigation.js';
 
@@ -94,12 +96,14 @@ export function initTrimmer() {
       syncFromInputs();
       drawWaveform();
     });
+    trimStartSec.addEventListener('change', normalizeRangeInputs);
   }
   if (trimEndSec) {
     trimEndSec.addEventListener('input', () => {
       syncFromInputs();
       drawWaveform();
     });
+    trimEndSec.addEventListener('change', normalizeRangeInputs);
   }
 
   // Nudge buttons
@@ -189,6 +193,7 @@ async function handleTrimFileSelection(file) {
   const trimStartSec = document.getElementById('trimStartSec');
   const trimEndSec = document.getElementById('trimEndSec');
 
+  stopPlayback();
   trimAudioFile = file;
   if (trimFileName) trimFileName.textContent = file.name;
   if (trimFileMeta) trimFileMeta.textContent = 'Decoding audio and analyzing sound wave...';
@@ -197,12 +202,7 @@ async function handleTrimFileSelection(file) {
   if (trimStatusBadge) trimStatusBadge.classList.remove('hidden');
 
   try {
-    const arrayBuffer = await file.arrayBuffer();
-    if (!trimAudioContext) {
-      trimAudioContext = new (window.AudioContext || window.webkitAudioContext)();
-    }
-
-    trimAudioBuffer = await trimAudioContext.decodeAudioData(arrayBuffer);
+    trimAudioBuffer = await decodeAudioFile(file);
 
     if (trimFileMeta) {
       trimFileMeta.textContent = `${formatTime(trimAudioBuffer.duration)} • ${trimAudioBuffer.sampleRate} Hz • ${trimAudioBuffer.numberOfChannels} ch • ${formatBytes(file.size)}`;
@@ -593,6 +593,23 @@ function setupWaveformInteractions(canvas) {
   });
 }
 
+// Once the user commits a value, clamp both inputs to the file and swap them if reversed
+function normalizeRangeInputs() {
+  const trimStartSec = document.getElementById('trimStartSec');
+  const trimEndSec = document.getElementById('trimEndSec');
+  if (!trimAudioBuffer || !trimStartSec || !trimEndSec) return;
+
+  const duration = trimAudioBuffer.duration;
+  let start = Math.max(0, Math.min(duration, parseFloat(trimStartSec.value) || 0));
+  let end = Math.max(0, Math.min(duration, parseFloat(trimEndSec.value) || duration));
+  if (start > end) [start, end] = [end, start];
+
+  trimStartSec.value = start.toFixed(2);
+  trimEndSec.value = end.toFixed(2);
+  syncFromInputs();
+  drawWaveform();
+}
+
 function syncFromInputs() {
   const trimStartSec = document.getElementById('trimStartSec');
   const trimEndSec = document.getElementById('trimEndSec');
@@ -839,45 +856,34 @@ async function executeTrim() {
 
   try {
     const sampleRate = trimAudioBuffer.sampleRate;
-    const channels = trimAudioBuffer.numberOfChannels;
     const startSample = Math.floor(start * sampleRate);
-    const sampleLength = Math.floor((end - start) * sampleRate);
+    const sampleLength = Math.max(1, Math.floor((end - start) * sampleRate));
+    let exportBuffer = sliceBuffer(trimAudioBuffer, startSample, sampleLength);
+
+    // MP3/AAC only support certain rates (e.g. no 96 kHz), so resample when needed
+    const outputRate = encoderSampleRate(targetFormat, sampleRate);
+    if (outputRate !== sampleRate) {
+      exportBuffer = await resampleBuffer(exportBuffer, exportBuffer.numberOfChannels, outputRate);
+    }
 
     const encoderOptions = {
       bitrate: isLossless ? 192 : qualityVal,
       bitDepth: isLossless ? qualityVal : 16,
-      channels: channels,
-      sampleRate: sampleRate
+      channels: exportBuffer.numberOfChannels,
+      sampleRate: exportBuffer.sampleRate
     };
 
     let exportedBlob = null;
-
     if (targetFormat === 'wav') {
-      exportedBlob = bufferToWav(trimAudioBuffer, startSample, sampleLength, encoderOptions);
+      exportedBlob = bufferToWav(exportBuffer, 0, null, encoderOptions);
     } else if (targetFormat === 'aiff') {
-      exportedBlob = bufferToAiff(trimAudioBuffer, startSample, sampleLength, encoderOptions);
-    } else {
-      // For MP3, M4A, OGG: slice into an AudioBuffer
-      const offlineCtx = new (window.OfflineAudioContext || window.webkitAudioContext)(
-        channels,
-        sampleLength,
-        sampleRate
-      );
-      const slicedBuffer = offlineCtx.createBuffer(channels, sampleLength, sampleRate);
-
-      for (let ch = 0; ch < channels; ch++) {
-        const fullChannel = trimAudioBuffer.getChannelData(ch);
-        const subData = fullChannel.subarray(startSample, startSample + sampleLength);
-        slicedBuffer.copyToChannel(subData, ch);
-      }
-
-      if (targetFormat === 'mp3') {
-        exportedBlob = await bufferToMp3(slicedBuffer, encoderOptions);
-      } else if (targetFormat === 'm4a') {
-        exportedBlob = await bufferToM4a(slicedBuffer, encoderOptions);
-      } else if (targetFormat === 'ogg') {
-        exportedBlob = await bufferToOgg(slicedBuffer, encoderOptions);
-      }
+      exportedBlob = bufferToAiff(exportBuffer, 0, null, encoderOptions);
+    } else if (targetFormat === 'mp3') {
+      exportedBlob = await bufferToMp3(exportBuffer, encoderOptions);
+    } else if (targetFormat === 'm4a') {
+      exportedBlob = await bufferToM4a(exportBuffer, encoderOptions);
+    } else if (targetFormat === 'ogg') {
+      exportedBlob = await bufferToOgg(exportBuffer, encoderOptions);
     }
 
     const baseName = trimAudioFile.name.replace(/\.[^/.]+$/, '');

@@ -1,10 +1,10 @@
 // Audiocut - Feature 3: Audio Merger & Joiner Module
-import { formatBytes, formatTime, getAudioExtensionMatch } from '../utils/formatters.js';
+import { formatBytes, formatTime, getAudioExtensionMatch, escapeHtml } from '../utils/formatters.js';
 import { bufferToWav } from '../utils/wav-encoder.js';
+import { decodeAudioFile } from '../utils/audio-decode.js';
 import { saveOrDownloadWav } from '../services/storage.js';
 
 let mergeTracks = [];
-let mergeAudioContext = null;
 
 export function initMerger() {
   const mergeDropZone = document.getElementById('mergeDropZone');
@@ -33,6 +33,8 @@ export function initMerger() {
     mergeFileInput.addEventListener('change', (e) => {
       if (e.target.files.length > 0) {
         addMergeFiles(Array.from(e.target.files));
+        // Reset so picking the same file again (e.g. after Clear) still fires 'change'
+        mergeFileInput.value = '';
       }
     });
   }
@@ -60,29 +62,29 @@ async function addMergeFiles(files) {
     return;
   }
 
-  if (!mergeAudioContext) {
-    mergeAudioContext = new (window.AudioContext || window.webkitAudioContext)();
-  }
-
+  const failedNames = [];
   for (const file of validFiles) {
     try {
-      const arrayBuffer = await file.arrayBuffer();
-      const buffer = await mergeAudioContext.decodeAudioData(arrayBuffer);
+      const buffer = await decodeAudioFile(file);
       mergeTracks.push({
         id: 'track_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
         file: file,
         buffer: buffer,
         name: file.name,
         duration: buffer.duration,
-        size: file.size,
-        audioUrl: URL.createObjectURL(file)
+        size: file.size
       });
     } catch (err) {
       console.warn('Could not decode file for merging:', file.name, err);
+      failedNames.push(file.name);
     }
   }
 
   renderMergeTracksList();
+
+  if (failedNames.length > 0) {
+    alert(`Could not decode ${failedNames.length} file(s), so they were not added:\n\n${failedNames.join('\n')}`);
+  }
 }
 
 function renderMergeTracksList() {
@@ -121,7 +123,7 @@ function renderMergeTracksList() {
       <div class="flex items-center gap-3 min-w-0 flex-1">
         <span class="w-6 h-6 bg-neoYellow border-2 border-black font-black text-center flex items-center justify-center text-xs shrink-0">${index + 1}</span>
         <div class="truncate">
-          <p class="font-extrabold text-black truncate text-sm">${track.name}</p>
+          <p class="font-extrabold text-black truncate text-sm" title="${escapeHtml(track.name)}">${escapeHtml(track.name)}</p>
           <p class="text-[10px] text-slate-600 font-bold uppercase mt-0.5">${formatTime(track.duration)} • ${track.buffer.sampleRate} Hz • ${formatBytes(track.size)}</p>
         </div>
       </div>
@@ -199,7 +201,7 @@ async function executeMerge() {
   try {
     const gapSeconds = parseFloat(mergeSilenceGap?.value || 0);
     
-    let maxSampleRate = 44100;
+    let maxSampleRate = 0;
     let maxChannels = 1;
     mergeTracks.forEach(t => {
       if (t.buffer.sampleRate > maxSampleRate) maxSampleRate = t.buffer.sampleRate;

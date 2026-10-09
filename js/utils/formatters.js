@@ -47,3 +47,13 @@ export function getAudioExtensionMatch(filename) {
   const ext = filename.split('.').pop().toLowerCase();
   return SUPPORTED_AUDIO_EXTENSIONS.includes(ext);
 }
+
+// Escapes user-controlled text (e.g. file names) before it is placed into innerHTML
+export function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
