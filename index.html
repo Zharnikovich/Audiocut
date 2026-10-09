@@ -26,6 +26,10 @@
   <script src="https://unpkg.com/lucide@latest"></script>
   <!-- JSZip -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <!-- LameJS (Pure-JS MP3 Encoder) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js"></script>
+  <!-- MP4 Muxer (M4A / AAC Muxer) -->
+  <script src="https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.4/build/mp4-muxer.min.js"></script>
   <style>
     /* Neo-brutalist focus and scrollbar customization */
     ::-webkit-scrollbar {
@@ -40,12 +44,12 @@
       background: #000000;
     }
     ::-webkit-scrollbar-thumb:hover {
-      background: #FF5C00;
+      background: #C2410C;
     }
     /* Simple scale on select/focus */
     input:focus, select:focus {
       outline: none;
-      border-color: #FF5C00 !important;
+      border-color: #C2410C !important;
       background-color: #FFFFFF !important;
     }
   </style>
@@ -54,14 +58,17 @@
   
   <!-- Header / Navigation -->
   <header class="border-b-4 border-black bg-neoYellow text-black sticky top-0 z-50 shadow-[0_4px_0_0_#000]">
-    <div class="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
+    <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
       <div class="flex items-center space-x-3">
+        <button id="mobileMenuToggle" class="md:hidden bg-white text-black p-2 border-2 border-black shadow-[2px_2px_0px_0px_#000] hover:bg-black hover:text-white transition-all">
+          <i data-lucide="menu" class="w-5 h-5 stroke-[2.5]"></i>
+        </button>
         <div class="bg-black text-neoYellow p-2.5 border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] rounded-none">
           <i data-lucide="scissors" class="w-6 h-6 stroke-[3]"></i>
         </div>
         <div>
-          <h1 class="text-2xl font-black uppercase tracking-wider text-black">Audiocut</h1>
-          <p class="text-xs font-bold uppercase tracking-tight text-black/80">Slice audio into perfect chunks instantly</p>
+          <h1 class="text-2xl font-black uppercase tracking-wider text-black">Audiocut Studio</h1>
+          <p class="text-xs font-bold uppercase tracking-tight text-black/80">Smart Client-Side Audio Suite</p>
         </div>
       </div>
       <div class="flex items-center space-x-3">
@@ -73,11 +80,101 @@
     </div>
   </header>
 
-  <!-- Main Content Wrapper -->
-  <main class="flex-grow max-w-5xl w-full mx-auto px-4 py-10 flex flex-col md:flex-row gap-10">
+  <!-- Main Content Wrapper with Sidebar -->
+  <main class="flex-grow max-w-7xl w-full mx-auto px-4 py-8 flex flex-col md:flex-row gap-8">
     
-    <!-- Left Column: Settings and Controls -->
-    <div class="flex-1 space-y-8">
+    <!-- Left Sidebar: Feature Navigation -->
+    <aside id="sidebarNav" class="w-full md:w-64 lg:w-72 shrink-0 space-y-6 hidden md:block">
+      <!-- Feature Navigation Card -->
+      <div class="bg-white border-4 border-black p-5 shadow-[6px_6px_0px_0px_#000] rounded-none space-y-4">
+        <div class="flex items-center justify-between pb-3 border-b-2 border-black">
+          <span class="text-xs font-black uppercase tracking-widest text-slate-600">Audio Tools</span>
+          <span class="px-2 py-0.5 bg-neoGreen text-black text-[10px] font-black border-2 border-black uppercase tracking-wider">v1.2</span>
+        </div>
+        
+        <nav class="space-y-2.5" id="featureNav">
+          <!-- Split by Interval (Active) -->
+          <button data-view="viewSplitter" class="feature-nav-btn w-full text-left p-3.5 bg-neoYellow border-3 border-black shadow-[4px_4px_0px_0px_#000] font-black uppercase text-xs tracking-wider flex items-center justify-between transition-all translate-x-[-1px] translate-y-[-1px]">
+            <div class="flex items-center gap-2.5">
+              <i data-lucide="scissors" class="w-4 h-4 stroke-[3]"></i>
+              <div>
+                <p class="leading-none text-black">Split Audio</p>
+                <p class="text-[9px] font-bold text-black/70 normal-case tracking-normal mt-0.5">Equal-interval slices</p>
+              </div>
+            </div>
+            <i data-lucide="chevron-right" class="w-4 h-4 stroke-[3]"></i>
+          </button>
+
+          <!-- Trim Audio -->
+          <button data-view="viewTrimmer" class="feature-nav-btn w-full text-left p-3.5 bg-white hover:bg-black hover:text-white text-black border-2 border-black shadow-[2px_2px_0px_0px_#000] font-black uppercase text-xs tracking-wider flex items-center justify-between transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[3px_3px_0px_0px_#000] group">
+            <div class="flex items-center gap-2.5">
+              <i data-lucide="crop" class="w-4 h-4 stroke-[2.5]"></i>
+              <div>
+                <p class="leading-none">Trim & Cut</p>
+                <p class="text-[9px] font-bold text-slate-500 group-hover:text-slate-300 normal-case tracking-normal mt-0.5">Start & end range</p>
+              </div>
+            </div>
+            <i data-lucide="chevron-right" class="w-4 h-4 stroke-[3]"></i>
+          </button>
+
+          <!-- Merge Audio -->
+          <button data-view="viewMerger" class="feature-nav-btn w-full text-left p-3.5 bg-white hover:bg-black hover:text-white text-black border-2 border-black shadow-[2px_2px_0px_0px_#000] font-black uppercase text-xs tracking-wider flex items-center justify-between transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[3px_3px_0px_0px_#000] group">
+            <div class="flex items-center gap-2.5">
+              <i data-lucide="layers" class="w-4 h-4 stroke-[2.5]"></i>
+              <div>
+                <p class="leading-none">Merge Audio</p>
+                <p class="text-[9px] font-bold text-slate-500 group-hover:text-slate-300 normal-case tracking-normal mt-0.5">Combine tracks</p>
+              </div>
+            </div>
+            <i data-lucide="chevron-right" class="w-4 h-4 stroke-[3]"></i>
+          </button>
+
+          <!-- Volume & Speed -->
+          <button data-view="viewEffects" class="feature-nav-btn w-full text-left p-3.5 bg-white hover:bg-black hover:text-white text-black border-2 border-black shadow-[2px_2px_0px_0px_#000] font-black uppercase text-xs tracking-wider flex items-center justify-between transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[3px_3px_0px_0px_#000] group">
+            <div class="flex items-center gap-2.5">
+              <i data-lucide="sliders" class="w-4 h-4 stroke-[2.5]"></i>
+              <div>
+                <p class="leading-none">Volume & Speed</p>
+                <p class="text-[9px] font-bold text-slate-500 group-hover:text-slate-300 normal-case tracking-normal mt-0.5">Gain & tempo adjustment</p>
+              </div>
+            </div>
+            <i data-lucide="chevron-right" class="w-4 h-4 stroke-[3]"></i>
+          </button>
+
+          <!-- Audio Converter -->
+          <button data-view="viewConverter" class="feature-nav-btn w-full text-left p-3.5 bg-white hover:bg-black hover:text-white text-black border-2 border-black shadow-[2px_2px_0px_0px_#000] font-black uppercase text-xs tracking-wider flex items-center justify-between transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[3px_3px_0px_0px_#000] group">
+            <div class="flex items-center gap-2.5">
+              <i data-lucide="refresh-cw" class="w-4 h-4 stroke-[2.5]"></i>
+              <div>
+                <p class="leading-none">Audio Converter</p>
+                <p class="text-[9px] font-bold text-slate-500 group-hover:text-slate-300 normal-case tracking-normal mt-0.5">MP3, WAV, M4A, OGG, AIFF</p>
+              </div>
+            </div>
+            <i data-lucide="chevron-right" class="w-4 h-4 stroke-[3]"></i>
+          </button>
+        </nav>
+      </div>
+
+      <!-- Privacy Card -->
+      <div class="bg-neoCream border-3 border-black p-4 shadow-[4px_4px_0px_0px_#000] space-y-2 text-xs font-bold">
+        <div class="flex items-center gap-1.5 text-black">
+          <i data-lucide="shield-check" class="w-4 h-4 text-[#C2410C] stroke-[2.5]"></i>
+          <span class="font-black uppercase tracking-wider text-[11px]">100% Client-Side</span>
+        </div>
+        <p class="text-slate-600 text-[11px] leading-relaxed">
+          Audio processing runs completely in your browser memory via Web Audio API. Zero uploads, zero telemetry.
+        </p>
+      </div>
+    </aside>
+
+    <!-- Main Workspace Container -->
+    <div class="flex-grow min-w-0">
+      
+      <!-- View 1: Split Audio (Original Feature) -->
+      <div id="viewSplitter" class="feature-view flex flex-col lg:flex-row gap-8">
+        
+        <!-- Left Column: Settings and Controls -->
+        <div class="flex-1 space-y-8">
       
       <!-- Card 1: Select Audio File -->
       <section class="bg-white border-4 border-black p-6 shadow-[8px_8px_0px_0px_#000] rounded-none transition-all relative">
@@ -103,9 +200,9 @@
             </div>
             <div>
               <p class="text-base font-black uppercase tracking-wide text-black">Drag & drop your audio file here</p>
-              <p class="text-xs font-bold text-slate-500 uppercase mt-1">Supports MP3, WAV, M4A, OGG, FLAC & more</p>
+              <p class="text-xs font-bold text-slate-600 uppercase mt-1">Supports MP3, WAV, M4A, OGG, FLAC & more</p>
             </div>
-            <button class="px-5 py-2 bg-white hover:bg-black hover:text-white text-black font-extrabold text-xs uppercase tracking-widest border-2 border-black shadow-[3px_3px_0px_0px_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0px_0px_#000] transition-all inline-block pointer-events-none">
+            <button class="px-5 py-2 bg-white group-hover:bg-black group-hover:text-white hover:bg-black hover:text-white text-black font-extrabold text-xs uppercase tracking-widest border-2 border-black shadow-[3px_3px_0px_0px_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0px_0px_#000] transition-all inline-block pointer-events-none">
               Browse Files
             </button>
           </div>
@@ -118,7 +215,7 @@
               <p class="text-md font-black uppercase tracking-wider text-black truncate" id="infoFileName">-</p>
               <p class="text-xs font-bold uppercase tracking-widest text-slate-500 mt-0.5" id="infoFileSize">-</p>
             </div>
-            <button id="removeFileBtn" class="bg-[#FF6B6B] hover:bg-red-600 text-black p-2 border-2 border-black shadow-[2px_2px_0px_0px_#000] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[3px_3px_0px_0px_#000] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[1px_1px_0px_0px_#000] transition-all shrink-0">
+            <button id="removeFileBtn" class="bg-[#FF6B6B] hover:bg-black hover:text-white text-black p-2 border-2 border-black shadow-[2px_2px_0px_0px_#000] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[3px_3px_0px_0px_#000] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[1px_1px_0px_0px_#000] transition-all shrink-0">
               <i data-lucide="trash-2" class="w-4 h-4 stroke-[2.5]"></i>
             </button>
           </div>
@@ -278,14 +375,539 @@
         </div>
       </div>
     </div>
+  </div>
+
+      <!-- View 2: Trim & Cut -->
+      <div id="viewTrimmer" class="feature-view hidden space-y-8">
+        <section class="bg-white border-4 border-black p-6 shadow-[8px_8px_0px_0px_#000] rounded-none relative">
+          <div class="absolute -top-3.5 -left-3.5 bg-neoBlue text-black text-xs font-black uppercase tracking-widest border-2 border-black px-2 py-0.5 shadow-[2px_2px_0px_0px_#000]">
+            Feature 02
+          </div>
+
+          <div class="flex items-center justify-between mb-6 mt-1">
+            <div>
+              <h2 class="text-xl font-black uppercase tracking-wider flex items-center gap-2 text-black">
+                <i data-lucide="crop" class="w-5 h-5 stroke-[2.5]"></i>
+                Precision Audio Trimmer
+              </h2>
+              <p class="text-xs font-bold text-slate-600 uppercase mt-1">Define custom start & end points to extract exactly the portion you need</p>
+            </div>
+            <span id="trimStatusBadge" class="hidden px-3 py-1 text-xs font-black uppercase tracking-widest border-2 border-black text-black bg-neoGreen shadow-[2px_2px_0px_0px_#000]">Loaded</span>
+          </div>
+
+          <!-- Drop Zone for Trimmer -->
+          <div id="trimDropZone" class="border-4 border-dashed border-black bg-[#FFFDF9] rounded-none p-8 text-center cursor-pointer hover:bg-neoYellow/15 hover:border-solid transition-all relative group">
+            <input type="file" id="trimFileInput" class="hidden" accept="audio/*" />
+            <div class="space-y-4">
+              <div class="mx-auto w-14 h-14 bg-white border-3 border-black flex items-center justify-center text-black group-hover:bg-neoYellow shadow-[3px_3px_0px_0px_#000] transition-all">
+                <i data-lucide="upload-cloud" class="w-7 h-7 stroke-[2.5]"></i>
+              </div>
+              <div>
+                <p class="text-base font-black uppercase tracking-wide text-black">Drag & drop audio file to trim</p>
+                <p class="text-xs font-bold text-slate-600 uppercase mt-1">Supports MP3, WAV, M4A, OGG, FLAC & more</p>
+              </div>
+              <button class="px-5 py-2 bg-white group-hover:bg-black group-hover:text-white hover:bg-black hover:text-white text-black font-extrabold text-xs uppercase tracking-widest border-2 border-black shadow-[3px_3px_0px_0px_#000] transition-all inline-block pointer-events-none">
+                Browse Audio File
+              </button>
+            </div>
+          </div>
+
+          <!-- Trimmer Workspace -->
+          <div id="trimWorkspace" class="hidden mt-6 space-y-6 animate-fade-in">
+            <!-- File Info Header -->
+            <div class="p-4 bg-neoCream border-2 border-black shadow-[3px_3px_0px_0px_#000] flex items-center justify-between">
+              <div class="truncate pr-4">
+                <p class="text-sm font-black uppercase tracking-wider text-black truncate" id="trimFileName">-</p>
+                <p class="text-xs font-bold uppercase tracking-widest text-slate-600 mt-0.5" id="trimFileMeta">-</p>
+              </div>
+              <button id="trimRemoveFileBtn" class="bg-[#FF6B6B] hover:bg-black hover:text-white text-black p-2 border-2 border-black shadow-[2px_2px_0px_0px_#000] transition-all shrink-0">
+                <i data-lucide="trash-2" class="w-4 h-4 stroke-[2.5]"></i>
+              </button>
+            </div>
+
+            <!-- Interactive Sound Wave (Waveform) Card -->
+            <div class="p-5 bg-white border-2 border-black shadow-[4px_4px_0px_0px_#000] space-y-4">
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-black uppercase tracking-wider">
+                <span class="flex items-center gap-1.5 text-black">
+                  <i data-lucide="activity" class="w-4 h-4 stroke-[2.5] text-neoOrange"></i>
+                  Interactive Sound Waveform
+                </span>
+                <div class="flex items-center gap-3">
+                  <span class="text-[10px] bg-neoCream px-2 py-0.5 border border-black text-slate-600 font-bold hidden sm:inline-block">
+                    Drag handles <span class="text-black font-black">[S]</span> & <span class="text-black font-black">[E]</span> or move region
+                  </span>
+                  <span id="trimCurrentTimeDisplay" class="font-mono text-sm bg-neoYellow px-2 py-0.5 border border-black text-black">00:00.0 / 00:00.0</span>
+                </div>
+              </div>
+
+              <!-- Waveform Canvas Container -->
+              <div id="trimWaveformWrapper" class="relative w-full h-[132px] select-none touch-none bg-[#FFFDF9] border-2 border-black shadow-[3px_3px_0px_0px_#000] overflow-hidden">
+                <canvas id="trimWaveformCanvas" class="w-full h-full block cursor-crosshair"></canvas>
+                <!-- Hover time indicator -->
+                <div id="trimWaveformHover" class="pointer-events-none absolute top-2 right-2 bg-black text-white text-[10px] font-mono font-bold px-1.5 py-0.5 hidden">
+                  00:00.0
+                </div>
+              </div>
+
+              <!-- Playback & Quick Actions -->
+              <div class="flex flex-wrap items-center justify-between gap-3 pt-1">
+                <div class="flex flex-wrap items-center gap-2.5">
+                  <button id="trimPlayPauseBtn" class="px-4 py-2 bg-white hover:bg-black hover:text-white text-black text-xs font-black uppercase tracking-wider border-2 border-black shadow-[2px_2px_0px_0px_#000] flex items-center gap-2 transition-all">
+                    <i data-lucide="play" id="trimPlayPauseIcon" class="w-4 h-4 fill-current"></i>
+                    <span id="trimPlayPauseText">Play Full</span>
+                  </button>
+                  <button id="trimPlayRangeBtn" class="px-4 py-2 bg-neoYellow hover:bg-black hover:text-white text-black text-xs font-black uppercase tracking-wider border-2 border-black shadow-[2px_2px_0px_0px_#000] flex items-center gap-2 transition-all">
+                    <i data-lucide="repeat" class="w-4 h-4 stroke-[2.5]"></i>
+                    <span>Play Selected Range</span>
+                  </button>
+                  <button id="trimStopBtn" class="px-3 py-2 bg-white hover:bg-black hover:text-white text-black text-xs font-black uppercase tracking-wider border-2 border-black shadow-[2px_2px_0px_0px_#000] flex items-center gap-1.5 transition-all">
+                    <i data-lucide="square" class="w-3.5 h-3.5 fill-current"></i>
+                    <span>Stop</span>
+                  </button>
+                </div>
+                <div class="text-xs font-black uppercase tracking-wide text-slate-600 font-mono">
+                  Selected Range: <span id="trimRangeDurationText" class="text-black bg-neoGreen px-1.5 py-0.5 border border-black font-black">10.00s</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Start & End Trim Inputs -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <!-- Start Time Box -->
+              <div class="p-5 bg-white border-2 border-black shadow-[4px_4px_0px_0px_#000] space-y-3">
+                <div class="flex items-center justify-between">
+                  <label class="block text-xs font-black uppercase tracking-wider text-slate-600">Start Time (sec)</label>
+                  <button id="trimSetStartToCurrent" class="text-[10px] font-black uppercase px-2 py-0.5 bg-white hover:bg-black hover:text-white text-black border border-black shadow-[1px_1px_0px_0px_#000]">Set to Playhead</button>
+                </div>
+                <input type="number" id="trimStartSec" value="0.0" min="0" step="0.5" class="w-full bg-white border-2 border-black px-4 py-2.5 text-black font-black text-lg shadow-[2px_2px_0px_0px_#000] focus:outline-none" />
+                <div class="flex items-center gap-1.5">
+                  <button class="trim-nudge px-2 py-1 bg-white hover:bg-black hover:text-white text-black text-[10px] font-black border-2 border-black shadow-[1px_1px_0px_0px_#000]" data-target="start" data-delta="-1">-1s</button>
+                  <button class="trim-nudge px-2 py-1 bg-white hover:bg-black hover:text-white text-black text-[10px] font-black border-2 border-black shadow-[1px_1px_0px_0px_#000]" data-target="start" data-delta="-0.1">-0.1s</button>
+                  <button class="trim-nudge px-2 py-1 bg-white hover:bg-black hover:text-white text-black text-[10px] font-black border-2 border-black shadow-[1px_1px_0px_0px_#000]" data-target="start" data-delta="0.1">+0.1s</button>
+                  <button class="trim-nudge px-2 py-1 bg-white hover:bg-black hover:text-white text-black text-[10px] font-black border-2 border-black shadow-[1px_1px_0px_0px_#000]" data-target="start" data-delta="1">+1s</button>
+                </div>
+              </div>
+
+              <!-- End Time Box -->
+              <div class="p-5 bg-white border-2 border-black shadow-[4px_4px_0px_0px_#000] space-y-3">
+                <div class="flex items-center justify-between">
+                  <label class="block text-xs font-black uppercase tracking-wider text-slate-600">End Time (sec)</label>
+                  <button id="trimSetEndToCurrent" class="text-[10px] font-black uppercase px-2 py-0.5 bg-white hover:bg-black hover:text-white text-black border border-black shadow-[1px_1px_0px_0px_#000]">Set to Playhead</button>
+                </div>
+                <input type="number" id="trimEndSec" value="10.0" min="0" step="0.5" class="w-full bg-white border-2 border-black px-4 py-2.5 text-black font-black text-lg shadow-[2px_2px_0px_0px_#000] focus:outline-none" />
+                <div class="flex items-center gap-1.5">
+                  <button class="trim-nudge px-2 py-1 bg-white hover:bg-black hover:text-white text-black text-[10px] font-black border-2 border-black shadow-[1px_1px_0px_0px_#000]" data-target="end" data-delta="-1">-1s</button>
+                  <button class="trim-nudge px-2 py-1 bg-white hover:bg-black hover:text-white text-black text-[10px] font-black border-2 border-black shadow-[1px_1px_0px_0px_#000]" data-target="end" data-delta="-0.1">-0.1s</button>
+                  <button class="trim-nudge px-2 py-1 bg-white hover:bg-black hover:text-white text-black text-[10px] font-black border-2 border-black shadow-[1px_1px_0px_0px_#000]" data-target="end" data-delta="0.1">+0.1s</button>
+                  <button class="trim-nudge px-2 py-1 bg-white hover:bg-black hover:text-white text-black text-[10px] font-black border-2 border-black shadow-[1px_1px_0px_0px_#000]" data-target="end" data-delta="1">+1s</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Export Format & Quality Options Card -->
+            <div class="p-5 bg-neoCream border-2 border-black shadow-[4px_4px_0px_0px_#000] space-y-4">
+              <div class="flex items-center justify-between border-b-2 border-black pb-2.5">
+                <span class="text-xs font-black uppercase tracking-wider text-black flex items-center gap-1.5">
+                  <i data-lucide="download" class="w-4 h-4"></i> Export Settings
+                </span>
+                <span id="trimFormatDescText" class="text-[10px] font-bold text-slate-600 uppercase">MPEG Audio Layer III (Universal)</span>
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <!-- Target Format -->
+                <div class="space-y-1.5">
+                  <label class="block text-xs font-black uppercase tracking-wider text-slate-600">Export Format</label>
+                  <select id="trimFormatSelect" class="w-full bg-white border-2 border-black px-3 py-2 text-black font-black text-xs uppercase tracking-wider shadow-[2px_2px_0px_0px_#000] focus:outline-none cursor-pointer">
+                    <option value="mp3" selected>MP3 (.mp3)</option>
+                    <option value="wav">WAV (.wav)</option>
+                    <option value="m4a">M4A (.m4a)</option>
+                    <option value="ogg">OGG (.ogg)</option>
+                    <option value="aiff">AIFF (.aiff)</option>
+                  </select>
+                </div>
+
+                <!-- Quality Option (Bitrate or Bit Depth) -->
+                <div id="trimQualityBox" class="space-y-1.5">
+                  <label id="trimQualityLabel" class="block text-xs font-black uppercase tracking-wider text-slate-600">Bitrate / Quality</label>
+                  <select id="trimQualitySelect" class="w-full bg-white border-2 border-black px-3 py-2 text-black font-black text-xs uppercase tracking-wider shadow-[2px_2px_0px_0px_#000] focus:outline-none cursor-pointer">
+                    <option value="128">128 kbps (Standard)</option>
+                    <option value="192" selected>192 kbps (High Quality)</option>
+                    <option value="256">256 kbps (Very High)</option>
+                    <option value="320">320 kbps (Maximum)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- Trim Summary Banner -->
+            <div id="trimSummaryBox" class="p-4 bg-white border-3 border-black shadow-[3px_3px_0px_0px_#000] text-xs font-bold uppercase tracking-wider text-black flex items-center justify-between">
+              <span id="trimSummaryText">Trimmed Duration: 10.0s (00:00.0 &rarr; 00:10.0)</span>
+              <span id="trimSummaryFormatBadge" class="text-[10px] bg-neoGreen text-black px-2 py-0.5 border border-black font-black">MP3 &bull; 192 kbps</span>
+            </div>
+
+            <!-- Trim Action Button -->
+            <button id="trimExecuteBtn" class="w-full py-5 bg-neoGreen hover:bg-black hover:text-white text-black border-4 border-black font-black uppercase tracking-widest text-lg shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer flex items-center justify-center gap-3">
+              <i data-lucide="scissors" class="w-6 h-6 stroke-[3]"></i>
+              <span id="trimExecuteBtnText">Trim & Export Audio</span>
+            </button>
+          </div>
+        </section>
+      </div>
+
+      <!-- View 3: Merge Audio -->
+      <div id="viewMerger" class="feature-view hidden space-y-8">
+        <section class="bg-white border-4 border-black p-6 shadow-[8px_8px_0px_0px_#000] rounded-none relative">
+          <div class="absolute -top-3.5 -left-3.5 bg-neoPurple text-black text-xs font-black uppercase tracking-widest border-2 border-black px-2 py-0.5 shadow-[2px_2px_0px_0px_#000]">
+            Feature 03
+          </div>
+
+          <div class="flex items-center justify-between mb-6 mt-1">
+            <div>
+              <h2 class="text-xl font-black uppercase tracking-wider flex items-center gap-2 text-black">
+                <i data-lucide="layers" class="w-5 h-5 stroke-[2.5]"></i>
+                Audio Merger & Joiner
+              </h2>
+              <p class="text-xs font-bold text-slate-600 uppercase mt-1">Combine multiple audio tracks sequentially into one single file</p>
+            </div>
+            <span id="mergeCountBadge" class="px-3 py-1 text-xs font-black font-mono border-2 border-black text-black bg-neoYellow shadow-[2px_2px_0px_0px_#000]">0 Tracks</span>
+          </div>
+
+          <!-- Drop Zone for Multiple Tracks -->
+          <div id="mergeDropZone" class="border-4 border-dashed border-black bg-[#FFFDF9] rounded-none p-8 text-center cursor-pointer hover:bg-neoYellow/15 hover:border-solid transition-all relative group">
+            <input type="file" id="mergeFileInput" class="hidden" accept="audio/*" multiple />
+            <div class="space-y-4">
+              <div class="mx-auto w-14 h-14 bg-white border-3 border-black flex items-center justify-center text-black group-hover:bg-neoYellow shadow-[3px_3px_0px_0px_#000] transition-all">
+                <i data-lucide="folder-plus" class="w-7 h-7 stroke-[2.5]"></i>
+              </div>
+              <div>
+                <p class="text-base font-black uppercase tracking-wide text-black">Drag & drop multiple tracks here</p>
+                <p class="text-xs font-bold text-slate-600 uppercase mt-1">Select 2 or more files to combine in order</p>
+              </div>
+              <button class="px-5 py-2 bg-white group-hover:bg-black group-hover:text-white hover:bg-black hover:text-white text-black font-extrabold text-xs uppercase tracking-widest border-2 border-black shadow-[3px_3px_0px_0px_#000] transition-all inline-block pointer-events-none">
+                Add Audio Files
+              </button>
+            </div>
+          </div>
+
+          <!-- Track List Container -->
+          <div id="mergeWorkspace" class="hidden mt-6 space-y-6">
+            <div class="space-y-3">
+              <div class="flex items-center justify-between text-xs font-black uppercase tracking-wider text-slate-600">
+                <span>Tracks Sequence (Drag or use arrows to reorder)</span>
+                <button id="mergeClearAllBtn" class="text-[10px] text-[#FF6B6B] hover:text-black font-black uppercase underline">Clear All</button>
+              </div>
+              <!-- Track Items List -->
+              <div id="mergeTracksList" class="space-y-3">
+                <!-- Dynamically rendered track items -->
+              </div>
+            </div>
+
+            <!-- Settings: Gap Between Tracks -->
+            <div class="p-5 bg-neoCream border-3 border-black shadow-[3px_3px_0px_0px_#000] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <p class="text-xs font-black uppercase tracking-wider text-black">Silence Gap Between Tracks</p>
+                <p class="text-[10px] font-bold text-slate-600 uppercase mt-0.5">Insert brief silence between spliced songs or voice recordings</p>
+              </div>
+              <div class="flex items-center gap-2">
+                <select id="mergeSilenceGap" class="bg-white border-2 border-black px-3 py-2 text-xs font-black uppercase shadow-[2px_2px_0px_0px_#000] focus:outline-none cursor-pointer">
+                  <option value="0">No Gap (0s)</option>
+                  <option value="0.5">0.5 Seconds</option>
+                  <option value="1">1.0 Seconds</option>
+                  <option value="2">2.0 Seconds</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Total Estimated Duration -->
+            <div id="mergeSummaryBox" class="p-4 bg-white border-3 border-black shadow-[3px_3px_0px_0px_#000] text-xs font-black uppercase tracking-wider flex items-center justify-between">
+              <span id="mergeTotalDuration">Total Combined Duration: 00:00.0</span>
+              <span class="text-[10px] bg-neoYellow px-2 py-0.5 border border-black font-black">Lossless Render</span>
+            </div>
+
+            <!-- Merge Execute Button -->
+            <button id="mergeExecuteBtn" class="w-full py-5 bg-neoGreen hover:bg-black hover:text-white text-black border-4 border-black font-black uppercase tracking-widest text-lg shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer flex items-center justify-center gap-3">
+              <i data-lucide="layers" class="w-6 h-6 stroke-[3]"></i>
+              <span>Merge & Download Joined Audio</span>
+            </button>
+          </div>
+        </section>
+      </div>
+
+      <!-- View 4: Volume & Speed Adjuster -->
+      <div id="viewEffects" class="feature-view hidden space-y-8">
+        <section class="bg-white border-4 border-black p-6 shadow-[8px_8px_0px_0px_#000] rounded-none relative">
+          <div class="absolute -top-3.5 -left-3.5 bg-neoOrange text-black text-xs font-black uppercase tracking-widest border-2 border-black px-2 py-0.5 shadow-[2px_2px_0px_0px_#000]">
+            Feature 04
+          </div>
+
+          <div class="flex items-center justify-between mb-6 mt-1">
+            <div>
+              <h2 class="text-xl font-black uppercase tracking-wider flex items-center gap-2 text-black">
+                <i data-lucide="sliders" class="w-5 h-5 stroke-[2.5]"></i>
+                Volume Booster & Speed Control
+              </h2>
+              <p class="text-xs font-bold text-slate-600 uppercase mt-1">Amplify quiet audio, normalize peak levels, or change tempo/playback speed</p>
+            </div>
+            <span id="effectsStatusBadge" class="hidden px-3 py-1 text-xs font-black uppercase tracking-widest border-2 border-black text-black bg-neoGreen shadow-[2px_2px_0px_0px_#000]">Ready</span>
+          </div>
+
+          <!-- Drop Zone -->
+          <div id="effectsDropZone" class="border-4 border-dashed border-black bg-[#FFFDF9] rounded-none p-8 text-center cursor-pointer hover:bg-neoYellow/15 hover:border-solid transition-all relative group">
+            <input type="file" id="effectsFileInput" class="hidden" accept="audio/*" />
+            <div class="space-y-4">
+              <div class="mx-auto w-14 h-14 bg-white border-3 border-black flex items-center justify-center text-black group-hover:bg-neoYellow shadow-[3px_3px_0px_0px_#000] transition-all">
+                <i data-lucide="volume-2" class="w-7 h-7 stroke-[2.5]"></i>
+              </div>
+              <div>
+                <p class="text-base font-black uppercase tracking-wide text-black">Drag & drop audio file to adjust</p>
+                <p class="text-xs font-bold text-slate-600 uppercase mt-1">Supports MP3, WAV, M4A, OGG, FLAC & more</p>
+              </div>
+              <button class="px-5 py-2 bg-white group-hover:bg-black group-hover:text-white hover:bg-black hover:text-white text-black font-extrabold text-xs uppercase tracking-widest border-2 border-black shadow-[3px_3px_0px_0px_#000] transition-all inline-block pointer-events-none">
+                Browse Audio File
+              </button>
+            </div>
+          </div>
+
+          <!-- Effects Workspace -->
+          <div id="effectsWorkspace" class="hidden mt-6 space-y-6">
+            <!-- File Info Header -->
+            <div class="p-4 bg-neoCream border-3 border-black shadow-[3px_3px_0px_0px_#000] flex items-center justify-between">
+              <div class="truncate pr-4">
+                <p class="text-sm font-black uppercase tracking-wider text-black truncate" id="effectsFileName">-</p>
+                <p class="text-xs font-bold uppercase tracking-widest text-slate-600 mt-0.5" id="effectsFileMeta">-</p>
+              </div>
+              <button id="effectsRemoveFileBtn" class="bg-[#FF6B6B] hover:bg-black hover:text-white text-black p-2 border-2 border-black shadow-[2px_2px_0px_0px_#000] transition-all shrink-0">
+                <i data-lucide="trash-2" class="w-4 h-4 stroke-[2.5]"></i>
+              </button>
+            </div>
+
+            <!-- Controls Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <!-- Volume Gain Card -->
+              <div class="p-5 bg-white border-3 border-black shadow-[4px_4px_0px_0px_#000] space-y-4">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-black uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+                    <i data-lucide="volume-2" class="w-4 h-4"></i> Volume Gain
+                  </span>
+                  <span id="effectsVolumeDisplay" class="font-mono text-sm font-black bg-neoYellow px-2 py-0.5 border border-black">100%</span>
+                </div>
+                <input type="range" id="effectsVolumeSlider" min="0" max="300" value="100" step="5" class="w-full accent-black cursor-pointer h-3 bg-slate-100 border-2 border-black rounded-none shadow-[2px_2px_0px_0px_#000]" />
+                <div class="flex items-center justify-between gap-2 pt-1">
+                  <button id="effectsNormalizeBtn" class="px-3 py-1.5 bg-neoCream hover:bg-black hover:text-white text-black text-[10px] font-black uppercase border-2 border-black shadow-[1px_1px_0px_0px_#000] transition-all flex items-center gap-1">
+                    <i data-lucide="zap" class="w-3.5 h-3.5"></i>
+                    <span>Peak Normalize</span>
+                  </button>
+                  <button id="effectsResetVolumeBtn" class="px-3 py-1.5 bg-white hover:bg-black hover:text-white text-black text-[10px] font-black uppercase border-2 border-black shadow-[1px_1px_0px_0px_#000] transition-all">
+                    Reset (100%)
+                  </button>
+                </div>
+              </div>
+
+              <!-- Speed & Tempo Card -->
+              <div class="p-5 bg-white border-3 border-black shadow-[4px_4px_0px_0px_#000] space-y-4">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-black uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+                    <i data-lucide="fast-forward" class="w-4 h-4"></i> Playback Speed
+                  </span>
+                  <span id="effectsSpeedDisplay" class="font-mono text-sm font-black bg-neoBlue px-2 py-0.5 border border-black">1.0x</span>
+                </div>
+                <input type="range" id="effectsSpeedSlider" min="0.5" max="2.0" value="1.0" step="0.05" class="w-full accent-black cursor-pointer h-3 bg-slate-100 border-2 border-black rounded-none shadow-[2px_2px_0px_0px_#000]" />
+                <div class="flex items-center gap-2 pt-1">
+                  <button class="effects-speed-preset px-2.5 py-1.5 bg-white hover:bg-black hover:text-white text-black text-[10px] font-black border-2 border-black shadow-[1px_1px_0px_0px_#000]" data-speed="0.75">0.75x</button>
+                  <button class="effects-speed-preset px-2.5 py-1.5 bg-white hover:bg-black hover:text-white text-black text-[10px] font-black border-2 border-black shadow-[1px_1px_0px_0px_#000]" data-speed="1.0">1.0x</button>
+                  <button class="effects-speed-preset px-2.5 py-1.5 bg-white hover:bg-black hover:text-white text-black text-[10px] font-black border-2 border-black shadow-[1px_1px_0px_0px_#000]" data-speed="1.25">1.25x</button>
+                  <button class="effects-speed-preset px-2.5 py-1.5 bg-white hover:bg-black hover:text-white text-black text-[10px] font-black border-2 border-black shadow-[1px_1px_0px_0px_#000]" data-speed="1.5">1.5x</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Preview Player -->
+            <div class="p-4 bg-neoCream border-3 border-black shadow-[3px_3px_0px_0px_#000] flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <button id="effectsPlayPauseBtn" class="px-4 py-2 bg-white hover:bg-black hover:text-white text-black text-xs font-black uppercase tracking-wider border-2 border-black shadow-[2px_2px_0px_0px_#000] flex items-center gap-2 transition-all">
+                  <i data-lucide="play" id="effectsPlayIcon" class="w-4 h-4 fill-current"></i>
+                  <span id="effectsPlayText">Live Preview</span>
+                </button>
+                <span class="text-xs font-bold text-slate-600 uppercase">Test volume and speed adjustments in real-time</span>
+              </div>
+            </div>
+
+            <!-- Export Button -->
+            <button id="effectsExportBtn" class="w-full py-5 bg-neoGreen hover:bg-black hover:text-white text-black border-4 border-black font-black uppercase tracking-widest text-lg shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer flex items-center justify-center gap-3">
+              <i data-lucide="download" class="w-6 h-6 stroke-[3]"></i>
+              <span>Export Processed Audio</span>
+            </button>
+          </div>
+        </section>
+      </div>
+
+      <!-- View 5: Multi-Format Audio Converter -->
+      <div id="viewConverter" class="feature-view hidden space-y-8">
+        <section class="bg-white border-4 border-black p-6 shadow-[8px_8px_0px_0px_#000] rounded-none relative">
+          <div class="absolute -top-3.5 -left-3.5 bg-neoGreen text-black text-xs font-black uppercase tracking-widest border-2 border-black px-2 py-0.5 shadow-[2px_2px_0px_0px_#000]">
+            Feature 05
+          </div>
+
+          <div class="flex items-center justify-between mb-6 mt-1">
+            <div>
+              <h2 class="text-xl font-black uppercase tracking-wider flex items-center gap-2 text-black">
+                <i data-lucide="refresh-cw" class="w-5 h-5 stroke-[2.5]"></i>
+                Multi-Format Audio Converter
+              </h2>
+              <p class="text-xs font-bold text-slate-600 uppercase mt-1">Batch convert audio files between MP3, WAV, M4A (AAC), OGG (Opus), and AIFF formats</p>
+            </div>
+            <span id="convertCountBadge" class="px-3 py-1 text-xs font-black font-mono border-2 border-black text-black bg-neoYellow shadow-[2px_2px_0px_0px_#000]">0 Files</span>
+          </div>
+
+          <!-- Drop Zone for Converter (Multiple Files) -->
+          <div id="convertDropZone" class="border-4 border-dashed border-black bg-[#FFFDF9] rounded-none p-8 text-center cursor-pointer hover:bg-neoYellow/15 hover:border-solid transition-all relative group">
+            <input type="file" id="convertFileInput" class="hidden" accept="audio/*" multiple />
+            <div class="space-y-4">
+              <div class="mx-auto w-14 h-14 bg-white border-3 border-black flex items-center justify-center text-black group-hover:bg-neoYellow shadow-[3px_3px_0px_0px_#000] transition-all">
+                <i data-lucide="file-audio" class="w-7 h-7 stroke-[2.5]"></i>
+              </div>
+              <div>
+                <p class="text-base font-black uppercase tracking-wide text-black">Drag & drop single or multiple audio files</p>
+                <p class="text-xs font-bold text-slate-600 uppercase mt-1">Supports MP3, WAV, M4A, AAC, OGG, FLAC, AIFF & more</p>
+              </div>
+              <button class="px-5 py-2 bg-white group-hover:bg-black group-hover:text-white hover:bg-black hover:text-white text-black font-extrabold text-xs uppercase tracking-widest border-2 border-black shadow-[3px_3px_0px_0px_#000] transition-all inline-block pointer-events-none">
+                Select Audio Files
+              </button>
+            </div>
+          </div>
+
+          <!-- Conversion Workspace -->
+          <div id="convertWorkspace" class="hidden mt-6 space-y-6 animate-fade-in">
+            <!-- Format & Quality Settings Card -->
+            <div class="p-6 bg-neoCream border-3 border-black shadow-[4px_4px_0px_0px_#000] space-y-6">
+              <div class="flex items-center justify-between border-b-2 border-black pb-3">
+                <span class="text-xs font-black uppercase tracking-wider text-black flex items-center gap-1.5">
+                  <i data-lucide="settings" class="w-4 h-4"></i> Conversion Options
+                </span>
+                <span id="convertFormatDescText" class="text-[10px] font-bold text-slate-600 uppercase">MPEG Audio Layer III (Universal)</span>
+              </div>
+
+              <!-- Options Grid -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <!-- Target Format -->
+                <div class="space-y-2">
+                  <label class="block text-xs font-black uppercase tracking-wider text-slate-600">Target Format</label>
+                  <select id="convertFormatSelect" class="w-full bg-white border-3 border-black px-3 py-2.5 text-black font-black text-sm uppercase tracking-wider shadow-[2px_2px_0px_0px_#000] focus:outline-none cursor-pointer">
+                    <option value="mp3" selected>MP3 (.mp3)</option>
+                    <option value="wav">WAV (.wav)</option>
+                    <option value="m4a">M4A (.m4a)</option>
+                    <option value="ogg">OGG (.ogg)</option>
+                    <option value="aiff">AIFF (.aiff)</option>
+                  </select>
+                </div>
+
+                <!-- Bitrate Box (for MP3, M4A, OGG) -->
+                <div id="convertBitrateBox" class="space-y-2">
+                  <label class="block text-xs font-black uppercase tracking-wider text-slate-600">Bitrate / Quality</label>
+                  <select id="convertBitrateSelect" class="w-full bg-white border-3 border-black px-3 py-2.5 text-black font-black text-sm uppercase tracking-wider shadow-[2px_2px_0px_0px_#000] focus:outline-none cursor-pointer">
+                    <option value="128">128 kbps (Standard)</option>
+                    <option value="192" selected>192 kbps (High Quality)</option>
+                    <option value="256">256 kbps (Very High)</option>
+                    <option value="320">320 kbps (Maximum)</option>
+                  </select>
+                </div>
+
+                <!-- Bit Depth Box (for WAV, AIFF) -->
+                <div id="convertBitDepthBox" class="hidden space-y-2">
+                  <label class="block text-xs font-black uppercase tracking-wider text-slate-600">PCM Bit Depth</label>
+                  <select id="convertBitDepthSelect" class="w-full bg-white border-3 border-black px-3 py-2.5 text-black font-black text-sm uppercase tracking-wider shadow-[2px_2px_0px_0px_#000] focus:outline-none cursor-pointer">
+                    <option value="16" selected>16-Bit PCM (CD Quality)</option>
+                    <option value="24">24-Bit PCM (Studio Master)</option>
+                  </select>
+                </div>
+
+                <!-- Channels Option -->
+                <div class="space-y-2">
+                  <label class="block text-xs font-black uppercase tracking-wider text-slate-600">Channels</label>
+                  <select id="convertChannelsSelect" class="w-full bg-white border-3 border-black px-3 py-2.5 text-black font-black text-sm uppercase tracking-wider shadow-[2px_2px_0px_0px_#000] focus:outline-none cursor-pointer">
+                    <option value="original" selected>Keep Original</option>
+                    <option value="2">Stereo (2 Ch)</option>
+                    <option value="1">Mono (1 Ch)</option>
+                  </select>
+                </div>
+
+                <!-- Sample Rate Option -->
+                <div class="space-y-2">
+                  <label class="block text-xs font-black uppercase tracking-wider text-slate-600">Sample Rate</label>
+                  <select id="convertSampleRateSelect" class="w-full bg-white border-3 border-black px-3 py-2.5 text-black font-black text-sm uppercase tracking-wider shadow-[2px_2px_0px_0px_#000] focus:outline-none cursor-pointer">
+                    <option value="original" selected>Keep Original</option>
+                    <option value="44100">44.1 kHz (CD Standard)</option>
+                    <option value="48000">48.0 kHz (Studio / Video)</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Output Destination -->
+              <div class="pt-4 border-t-2 border-black flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                <button id="convertChooseFolderBtn" class="flex items-center justify-center gap-2 px-4 py-2.5 bg-white hover:bg-black hover:text-white text-black text-xs font-black uppercase tracking-widest border-2 border-black shadow-[3px_3px_0px_0px_#000] transition-all shrink-0">
+                  <i data-lucide="folder" class="w-4 h-4 stroke-[2.5]"></i>
+                  Save Folder
+                </button>
+                <div id="convertOutputPathDisplay" class="flex-grow py-2.5 px-3 bg-white border-2 border-black text-xs font-mono text-black truncate shadow-[2px_2px_0px_0px_#000]">
+                  Standard Downloads (or Click to Select Folder)
+                </div>
+              </div>
+            </div>
+
+            <!-- Queue Header & List -->
+            <div class="space-y-3">
+              <div class="flex items-center justify-between text-xs font-black uppercase tracking-wider text-slate-600">
+                <span>Conversion Queue</span>
+                <button id="convertClearAllBtn" class="text-[10px] text-[#FF6B6B] hover:text-black font-black uppercase underline">Clear Queue</button>
+              </div>
+              <div id="convertQueueList" class="space-y-3 max-h-[350px] overflow-y-auto pr-1">
+                <!-- Dynamically populated queue items -->
+              </div>
+            </div>
+
+            <!-- Progress Widget -->
+            <div id="convertProgressWidget" class="hidden bg-white border-4 border-black p-5 shadow-[6px_6px_0px_0px_#000] space-y-3 rounded-none">
+              <div class="flex items-center justify-between border-b-2 border-black pb-2">
+                <div class="flex items-center gap-2">
+                  <span class="w-3 h-3 border-2 border-black bg-neoOrange animate-pulse inline-block"></span>
+                  <span class="text-xs font-black uppercase tracking-wider text-black" id="convertProgressStatus">Converting audio...</span>
+                </div>
+                <span class="text-xs font-black font-mono text-black" id="convertProgressPercent">0%</span>
+              </div>
+              <div class="w-full bg-white border-2 border-black h-5 overflow-hidden p-0.5 shadow-[2px_2px_0px_0px_#000]">
+                <div id="convertProgressBar" class="bg-neoOrange border-r-2 border-black h-full w-0 transition-all duration-200"></div>
+              </div>
+              <div class="flex justify-between items-center text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                <span id="convertProgressDetailed" class="truncate max-w-[300px]">Processing...</span>
+                <button id="convertCancelBtn" class="bg-[#FF6B6B] hover:bg-black hover:text-white text-black font-black text-[10px] uppercase tracking-widest px-2.5 py-1 border-2 border-black shadow-[2px_2px_0px_0px_#000] transition-all">
+                  Cancel
+                </button>
+              </div>
+            </div>
+
+            <!-- Start Action Button -->
+            <button id="convertStartBtn" class="w-full py-5 bg-neoGreen hover:bg-black hover:text-white text-black border-4 border-black font-black uppercase tracking-widest text-lg shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer flex items-center justify-center gap-3">
+              <i data-lucide="refresh-cw" class="w-6 h-6 stroke-[3]"></i>
+              <span>Start Audio Conversion</span>
+            </button>
+
+            <!-- Download All ZIP Button (visible after multi-file conversion) -->
+            <button id="convertDownloadZipBtn" class="hidden w-full py-3.5 bg-neoYellow hover:bg-black hover:text-white text-black text-xs font-black uppercase tracking-widest border-3 border-black shadow-[4px_4px_0px_0px_#000] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[5px_5px_0px_0px_#000] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[2px_2px_0px_0px_#000] transition-all flex items-center justify-center gap-2">
+              <i data-lucide="archive" class="w-4 h-4 stroke-[2.5]"></i>
+              <span>Download All Converted Files (.ZIP)</span>
+            </button>
+          </div>
+        </section>
+      </div>
+
+    </div>
   </main>
 
   <!-- Footer -->
   <footer class="border-t-4 border-black bg-white py-6 mt-auto">
-    <div class="max-w-5xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between text-xs font-bold uppercase tracking-wide text-black gap-4">
+    <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between text-xs font-bold uppercase tracking-wide text-black gap-4">
       <p>&copy; 2026 Audiocut. Running entirely client-side. Your files never leave your computer.</p>
       <div class="flex items-center space-x-4">
-        <a href="https://github.com" target="_blank" class="hover:text-neoOrange flex items-center gap-1.5 transition-colors">
+        <a href="https://github.com" target="_blank" class="text-black hover:text-[#C2410C] hover:underline decoration-2 underline-offset-4 flex items-center gap-1.5 transition-colors">
           <i data-lucide="github" class="w-4 h-4 stroke-[2.5]"></i>
           GitHub Source
         </a>
@@ -293,11 +915,22 @@
     </div>
   </footer>
 
-  <!-- Include Core App Logic -->
-  <script src="app.js"></script>
+  <!-- Include Core App Logic as ES Module -->
+  <script type="module" src="app.js?v=2.0"></script>
   <script>
-    // Initialize Lucide Icons
-    lucide.createIcons();
+    // Initialize Lucide Icons for initial static markup
+    if (window.lucide) {
+      lucide.createIcons();
+    }
+
+    // Browsers block ES modules on file:// pages, which leaves every tool unresponsive
+    if (location.protocol === 'file:') {
+      document.body.insertAdjacentHTML('afterbegin',
+        '<div class="p-4 bg-[#FF6B6B] border-b-4 border-black font-black text-sm text-black text-center">' +
+        'Audiocut must be served over HTTP to work. In this folder run: ' +
+        '<code class="font-mono bg-white px-1 border border-black">python3 -m http.server 8000</code> ' +
+        'and open http://localhost:8000</div>');
+    }
   </script>
 </body>
 </html>

@@ -6,8 +6,6 @@ import socket
 import threading
 import http.server
 import socketserver
-import tkinter as tk
-from tkinter import filedialog
 import platform
 import subprocess
 import webview
@@ -45,20 +43,22 @@ def start_server(port, directory):
 
 # JS API Exposed to Webview
 class Api:
+    def __init__(self):
+        self._window = None  # Underscore keeps it out of the JS-exposed API
+
     def select_folder(self):
         try:
-            # Create hidden root window for file dialogue to ensure proper thread integration and window lifting
-            root = tk.Tk()
-            root.withdraw()
-            root.lift()
-            root.attributes('-topmost', True)
-            
-            folder_path = filedialog.askdirectory(title="Select Output Folder")
-            root.destroy()
-            
-            if folder_path:
-                return os.path.abspath(folder_path)
-            return None
+            # Use pywebview's native dialog: it dispatches to the GUI main thread,
+            # which macOS requires (Tk from a js_api worker thread crashes there)
+            folder_dialog = getattr(getattr(webview, 'FileDialog', None), 'FOLDER', None)
+            if folder_dialog is None:
+                folder_dialog = webview.FOLDER_DIALOG  # pywebview < 5
+
+            result = self._window.create_file_dialog(folder_dialog)
+            if not result:
+                return None
+            folder_path = result if isinstance(result, str) else result[0]
+            return os.path.abspath(folder_path)
         except Exception as e:
             print(f"Error choosing folder: {e}", file=sys.stderr)
             return None
@@ -122,6 +122,7 @@ if __name__ == '__main__':
         resizable=True,
         min_size=(800, 600)
     )
+    api._window = window
     
     # Boot the Webview event loop (blocks until window is closed)
     webview.start()

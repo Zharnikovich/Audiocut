@@ -1,20 +1,22 @@
-# Audiocut - Smart Client-Side Audio Splitter
+# Audiocut Studio - Smart Client-Side Audio Suite
 
-Audiocut is a beautiful, modern, high-performance **audio splitter** that runs 100% in the browser or as a standalone desktop application. It lets you select an audio file, specify a split duration (e.g., 1 minute, 30 seconds), choose an output directory, and slice the audio into clean, high-quality, lossless 16-bit PCM WAV chunks.
+Audiocut Studio is a beautiful, modern, high-performance audio suite that runs 100% in the browser or as a standalone desktop application. It lets you slice, trim, merge, and adjust audio tracks into clean, high-quality, lossless 16-bit PCM WAV files.
 
-Because it runs entirely client-side using the browser's built-in **Web Audio API**, it handles audio decoding and slicing without needing any server back-end or external heavy binaries (like `ffmpeg`). **Your audio files never leave your computer.**
+Because it runs entirely client-side using the browser's built-in **Web Audio API**, it handles audio decoding and manipulation without needing any server back-end or external heavy binaries (like `ffmpeg`). **Your audio files never leave your computer.**
 
 ---
 
-## Features
+## 🧰 Studio Features
 
-- **Format Versatility**: Supports MP3, WAV, M4A, FLAC, OGG, and AAC (virtually any format your system browser can play).
-- **100% Client-Side**: Slices audio locally in milliseconds. Zero server lag, secure, and privacy-first.
-- **Dynamic Previews**: Live updates showing exactly how many slices will be generated before you click Cut.
-- **Direct Save (W3C File System Access API)**: Save sliced audio files straight into any local directory in Chrome/Edge.
-- **ZIP Download Fallback**: Automatically bundles slices into an uncompressed ZIP archive on Firefox and Safari.
-- **Built-in Audio Player**: Listen to and audit sliced fragments individually right inside the output panel before or after saving them.
-- **Multi-platform Native App**: Packages into a lightweight standalone Windows `.exe` and macOS `.app`.
+- **🔄 Audio Converter**: Batch convert single or multiple audio files between **MP3, WAV, M4A (AAC), OGG (Opus), and AIFF** with custom bitrate (128-320 kbps), bit depth (16/24-bit), channel routing, and sample rate resampling.
+- **✂️ Split Audio**: Slice long audio into equal-interval chunks (by minutes or seconds) with live preview and instant ZIP or directory export.
+- **⏱️ Trim & Cut**: Precision interactive audio trimmer featuring a real-time **visual sound waveform**, draggable `[S]` start and `[E]` end handles, draggable selection region, live playhead preview, and multi-format export (**MP3, WAV, M4A, OGG, AIFF**).
+- **🔗 Merge Audio**: Combine multiple audio tracks sequentially with customizable silence gaps, reordering, and lossless mixing.
+- **🔊 Volume & Speed**: Boost gain (up to 300%), peak normalize audio with 1 click, or shift playback speed (0.5x - 2.0x) with real-time preview.
+- **Format Versatility**: Supports MP3, WAV, M4A, FLAC, OGG, and AAC (virtually any format your browser can decode).
+- **100% Client-Side**: Processes audio in-memory in milliseconds. Zero server lag, private, and secure.
+- **Direct Save & ZIP Support**: Save directly to disk (Desktop App or Chrome/Edge File System Access API), with automatic ZIP fallback for Safari and Firefox.
+- **Multi-platform Desktop App**: Run natively as a standalone desktop window on macOS and Windows powered by `pywebview`.
 
 ---
 
@@ -22,11 +24,30 @@ Because it runs entirely client-side using the browser's built-in **Web Audio AP
 
 ```text
 Audiocut/
-├── index.html        # Front-end UI (built with Tailwind CSS and Lucide Icons)
-├── app.js            # Core audio engine (WAV encoder, Web Audio API slicer)
-├── app.py            # Desktop application wrapper (Python + PyWebView)
-├── requirements.txt  # Python desktop dependencies
-└── README.md         # Documentation
+├── index.html            # Main UI & layout (Tailwind CSS, Lucide Icons)
+├── app.js                # App entry point (initializes modules)
+├── js/
+│   ├── constants.js      # App constants & supported audio formats
+│   ├── components/
+│   │   └── navigation.js # Sidebar navigation & global audio coordinator
+│   ├── services/
+│   │   └── storage.js    # Desktop & browser storage, FileSystem API, ZIP
+│   ├── utils/
+│   │   ├── formatters.js # Time, bytes, base64 formatting utilities
+│   │   ├── wav-encoder.js# Lossless 16/24-bit PCM WAV audio encoder
+│   │   ├── aiff-encoder.js# Apple AIFF PCM audio encoder
+│   │   ├── mp3-encoder.js# LAME pure-JS MP3 encoder
+│   │   ├── m4a-encoder.js# AAC M4A encoder (WebCodecs & MP4Muxer)
+│   │   └── ogg-encoder.js# OGG Opus audio encoder
+│   └── modules/
+│       ├── converter.js  # Batch multi-format converter workflow
+│       ├── splitter.js   # Interval audio splitting workflow
+│       ├── trimmer.js    # Precision start/end range audio trimmer
+│       ├── merger.js     # Sequential track joiner & mixer
+│       └── effects.js    # Volume gain booster & tempo adjuster
+├── app.py                # Desktop application wrapper (Python + PyWebView)
+├── requirements.txt      # Python desktop dependencies
+└── README.md             # Documentation
 ```
 
 ---
@@ -37,12 +58,12 @@ Since the frontend is built entirely using standard HTML, CSS, and modern JavaSc
 
 ### Deploy Steps:
 1. Create a new repository on GitHub.
-2. Push `index.html` and `app.js` directly to the `main` or `gh-pages` branch.
+2. Push `index.html`, `app.js` **and the whole `js/` folder** to the `main` or `gh-pages` branch (the app is split into ES modules under `js/` and will not load without them).
 3. In your repository settings, go to **Pages**.
 4. Select **Deploy from a branch** and choose your branch (e.g., `main`), then click **Save**.
 5. Your web app will be live at `https://<your-username>.github.io/<your-repo-name>/`!
 
-*Tip: You can also run the web app locally by simply double-clicking the `index.html` file in your browser, or serving it with a simple server:*
+*To run the web app locally, serve the project folder over HTTP and open http://localhost:8000. Opening `index.html` directly (double-clicking, `file://`) does not work, because browsers block ES modules on `file://` pages:*
 ```bash
 python3 -m http.server 8000
 ```
@@ -74,7 +95,7 @@ You can compile `app.py` and its assets into a single standalone executable usin
 ### 🍎 On macOS (Generates `.app` and Unix Executable)
 In your terminal, run:
 ```bash
-pyinstaller --onefile --windowed --name "Audiocut" --add-data "index.html:." --add-data "app.js:." app.py
+pyinstaller --onefile --windowed --name "Audiocut" --add-data "index.html:." --add-data "app.js:." --add-data "js:js" app.py
 ```
 This produces:
 - `dist/Audiocut.app` (The double-clickable macOS bundle).
@@ -83,7 +104,7 @@ This produces:
 ### 🪟 On Windows (Generates `.exe`)
 Open command prompt or PowerShell and run:
 ```bash
-pyinstaller --onefile --windowed --name "Audiocut" --add-data "index.html;." --add-data "app.js;." app.py
+pyinstaller --onefile --windowed --name "Audiocut" --add-data "index.html;." --add-data "app.js;." --add-data "js;js" app.py
 ```
 *(Notice the separator is a semicolon `;` on Windows instead of a colon `:` on macOS)*
 
@@ -96,7 +117,7 @@ This produces:
 
 1. **Decoding**: It uses a standard `FileReader` to load the audio file as an `ArrayBuffer`. This raw buffer is passed to `AudioContext.decodeAudioData()`, which calls the operating system's hardware-accelerated audio codecs to decode the audio into raw PCM Float32 samples (`AudioBuffer`).
 2. **Slicing**: For each segment (determined by the split duration), the engine copies the exact segment range of samples into a temporary subarray for each channel.
-3. **WAV Encoding**: A custom, lightweight, high-performance WAV Encoder (written in `app.js`) writes a 44-byte standard **WAV RIFF header** (configuring format, sample rate, bit depth, channel count, byte rate, and data size) followed by the Float32 samples clamped and scaled down to **16-bit signed PCM** integers.
+3. **WAV Encoding**: A custom, lightweight, high-performance WAV Encoder (`js/utils/wav-encoder.js`) writes a 44-byte standard **WAV RIFF header** (configuring format, sample rate, bit depth, channel count, byte rate, and data size) followed by the Float32 samples clamped and scaled down to **16-bit signed PCM** integers.
 4. **Saving**:
    - On Desktop, it sends the byte arrays back to Python as base64 strings to write straight to disk.
    - On Chrome/Edge, it writes them directly to disk using W3C writable file descriptors.
